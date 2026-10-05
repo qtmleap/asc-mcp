@@ -34,6 +34,8 @@ allowed. Optional native TLS uses paired `--tls-cert` / `--tls-key` flags.
 
 ## Docker and shared LocalGPT stack
 
+See [docs/docker-sidecar.md](docs/docker-sidecar.md) for the Docker sidecar details.
+
 The Docker build uses BuildKit read-only source bind mounts and Cargo cache
 mounts. The runtime is nonroot `distroless/cc-debian12` with no shell or build
 toolchain; private keys/cookies are never copied into the image. The build context
@@ -86,7 +88,7 @@ from this Mac use `http://127.0.0.1:8878/mcp`.
 
 The Apple ID session below means an authenticated **App Store Connect web
 session**, not this chat or an official API-key JWT. The current server exposes
-five reviewer tools with a session alone. It adds the 356 public API tools when
+ten reviewer tools with a session alone (five status tools plus the five conversation/monitor tools). It adds the 356 public API tools when
 team API credentials are configured; actual access depends on Apple's role
 permissions. Having a key does not grant every tool permission.
 
@@ -96,6 +98,7 @@ permissions. Having a key does not grant every tool permission.
 | Read Apple/developer messages, dates, rejection and attachment references | Same session | `get_reviewer_messages`; implemented; attachment file download is not implemented |
 | Check new or changed Apple replies | Same session | `check_reviewer_updates`; live read confirmed for Interceptor on 2026-10-05 |
 | Record that a checked snapshot has been reviewed | Local monitor state and exact `snapshot_token` | `acknowledge_reviewer_updates`; live workflow confirmed; changes local state only, not Apple's read status |
+| List visible apps; read versions and review submissions with raw Apple states; read the current rejection and Apple messages; check the session | Same session | Five status tools implemented and tested offline; live HTTP MCP verified on 2026-10-05 for the current provider's 10 apps, with rejection details for Interceptor and Kotatsu. Read-only, no monitor state |
 | Inspect old reply context | Same session | `get_legacy_reviewer_context`; experimental legacy endpoint; not live verified |
 | Send a reply to App Review | Same session plus `ASC_REVIEW_ENABLE_LEGACY_REPLY=true` | `reply_reviewer_message`; experimental, disabled by default, not live verified; no reply attachments |
 | Read/update app metadata, versions and review information; upload screenshots/previews | Team `.p8`, Key ID, Issuer ID and sufficient role | Public API tools implemented and tested offline; live access pending |
@@ -198,6 +201,18 @@ session). It does not require official API-key credentials. Optional tools:
 | `get_legacy_reviewer_context` | Inspect the old reply context |
 | `check_reviewer_updates` | Read unseen/changed Apple messages |
 | `acknowledge_reviewer_updates` | Acknowledge the exact analysed snapshot locally |
+| `list_review_apps` | List apps visible to the session (all bounded pages) |
+| `get_app_review_status` | Versions and review submissions for one numeric `app_id`, raw states |
+| `get_all_app_review_statuses` | The same for every visible app; partial results say `complete: false` |
+| `get_app_rejection_details` | Current rejection and its latest linked submission's Apple messages |
+| `get_review_connection_status` | Session check for the current provider (no identity) |
+
+The five status tools are read-only: no login, POST, team switch, or monitor
+state/lock write. Limits: they see only the provider of the current session;
+older rejection messages are historical and labelled so; a `COMPLETE` review
+submission is not approval; when the latest submission cannot be identified the
+result is `unknown`/`complete: false`, never "no issues". See
+[reviewer monitoring](docs/rust-reviewer.md#review-status-tools).
 
 `reply_reviewer_message` remains **experimental and disabled by default**;
 `ASC_REVIEW_ENABLE_LEGACY_REPLY=true` exposes the old reply route for explicit

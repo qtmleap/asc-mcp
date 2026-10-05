@@ -18,6 +18,8 @@ use std::{
 };
 use url::Url;
 
+mod status;
+
 const MAX_BODY: usize = 8 * 1024 * 1024;
 const MAX_SESSION: usize = 1024 * 1024;
 const ORIGIN: &str = "https://appstoreconnect.apple.com";
@@ -29,6 +31,7 @@ pub struct Reviewer {
     origin: Url,
     app_id: String,
     legacy_reply: bool,
+    limits: status::Limits,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -349,11 +352,34 @@ impl Reviewer {
             root,
             origin: Url::parse(ORIGIN)?,
             app_id,
+            limits: status::Limits::default(),
             legacy_reply: matches!(
                 std::env::var("ASC_REVIEW_ENABLE_LEGACY_REPLY").as_deref(),
                 Ok("1" | "true")
             ),
         })
+    }
+
+    /// Test constructor pointing at a local mock origin with a private cookie file.
+    #[cfg(test)]
+    pub(crate) fn for_test(origin: &str, dir: &Path) -> Self {
+        let path = dir.join("session.cookie");
+        if !path.exists() {
+            atomic_json(&path,&json!({"cookies":[{"name":"session","value":"secret-sentinel","domain":"apple.com","path":"/"}]})).unwrap();
+        }
+        Self {
+            client: Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .retry(reqwest::retry::never())
+                .build()
+                .unwrap(),
+            cookie_path: path,
+            root: dir.to_owned(),
+            origin: Url::parse(origin).unwrap(),
+            app_id: "123".into(),
+            legacy_reply: false,
+            limits: status::Limits::default(),
+        }
     }
 
     pub fn tools(&self) -> Vec<Value> {
@@ -392,7 +418,9 @@ impl Reviewer {
         if self.legacy_reply {
             ops.push(("reply_reviewer_message", "EXPERIMENTAL unverified legacy reply. Sends once, never retries; read back accepted_unverified before claiming delivery.", vec!["app_id", "platform", "thread_id", "sender", "message"], false));
         }
-        ops.into_iter().map(|(name,description,required,readonly)| { let props: BTreeMap<_,_> = required.iter().map(|k| (*k,json!({"type":"string"}))).collect(); json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":props,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":readonly,"openWorldHint":name != "acknowledge_reviewer_updates"}}) }).collect()
+        let mut tools: Vec<Value> = ops.into_iter().map(|(name,description,required,readonly)| { let props: BTreeMap<_,_> = required.iter().map(|k| (*k,json!({"type":"string"}))).collect(); json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":props,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":readonly,"openWorldHint":name != "acknowledge_reviewer_updates"}}) }).collect();
+        tools.extend(status::tools());
+        tools
     }
 
     async fn request(
@@ -544,6 +572,15 @@ impl Reviewer {
         ))
     }
     pub async fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        self.call_with_api(name, args, None).await
+    }
+    /// `api_configured` is the server's actual public-API client state, if known.
+    pub async fn call_with_api(
+        &self,
+        name: &str,
+        args: &Value,
+        api_configured: Option<bool>,
+    ) -> Result<Value> {
         let tool = self
             .tools()
             .into_iter()
@@ -558,6 +595,7 @@ impl Reviewer {
             arg(args, key.as_str().unwrap())?;
         }
         match name {
+            n if status::NAMES.contains(&n) => self.status_call(n, args, api_configured).await,
             "check_reviewer_updates" => self.check_updates().await,
             "acknowledge_reviewer_updates" => self.acknowledge(arg(args, "snapshot_token")?),
             "list_reviewer_threads" => {
@@ -862,6 +900,7 @@ mod tests {
             origin: Url::parse(&server.base_url()).unwrap(),
             app_id: "123".into(),
             legacy_reply: false,
+            limits: status::Limits::default(),
         };
         (dir, reviewer)
     }

@@ -38,7 +38,7 @@ Reviewer tools activate when the private session exists or
 `6749347474`, is retained. Monitor files remain `state.json` and `messages.json`
 in the same private directory.
 
-The tools are `list_reviewer_threads`, `get_reviewer_messages`,
+The conversation and monitor tools are `list_reviewer_threads`, `get_reviewer_messages`,
 `get_legacy_reviewer_context`, `check_reviewer_updates`, and
 `acknowledge_reviewer_updates`. Iris reads follow up to 20 pages, bounded to
 8 MiB, with pagination restricted to the same origin and exact endpoint path.
@@ -65,6 +65,54 @@ both CSRF headers, and sends one POST. It never automatically retries. A legacy
 `SUCCESS` response is `accepted_unverified`; read back the conversation before
 claiming delivery or retrying an uncertain result. This route is not live
 validated.
+
+## Review status tools
+
+Five session-only, read-only tools sit beside the five above (ten reviewer tools
+in total). They reuse the same HTTP client, redaction, same-origin/exact-path
+pagination (max 20 pages, 8 MiB). They never write `state.json`/`messages.json`,
+take the monitor lock, log in, switch teams or send a POST. Live verification
+for the current provider is described below.
+
+| Tool | Arguments | Endpoint(s) |
+| --- | --- | --- |
+| `list_review_apps` | none | `/iris/v1/apps?limit=200` |
+| `get_app_review_status` | `app_id` (digits only) | `/iris/v1/apps/{id}/appStoreVersions?limit=200`, `/iris/v1/apps/{id}/reviewSubmissions?limit=200&include=appStoreVersionForReview` |
+| `get_all_app_review_statuses` | none | the two above for each listed app |
+| `get_app_rejection_details` | `app_id` (digits only) | the two above, then the existing threads/messages endpoints |
+| `get_review_connection_status` | none | `GET /olympus/v1/session` |
+
+Extra or invalid arguments fail before any HTTP request. There is no app-count
+cap: all pages are followed, and failure to complete is explicit.
+
+- **Status**: version `id/platform/versionString/appStoreState/appVersionState/createdDate`
+  and submission `id/platform/state/submittedDate/version_id` are preserved as Apple's
+  raw strings (unknown values included). A `COMPLETE` submission is **not** approval.
+  Either resource failing fails the call.
+- **Batch**: item deadline 55 s, batch deadline 150 s (below the 180 s MCP timeout).
+  A 500 on one app is recorded in `errors` and the batch continues; an auth failure
+  stops the rest (`not_checked`). Partial results have `complete: false`. Output is
+  bounded to 8 MiB; trimmed results set `truncated: true` and `omitted_count`.
+- **Rejection**: versions whose `appVersionState` (fallback `appStoreState`) is
+  `REJECTED`/`METADATA_REJECTED`. Only submissions linked to that version are used; the
+  latest is the one with the greatest valid `submittedDate`. Missing links, bad dates or
+  ties give `unknown_*` and `complete: false`, not "no issues". Messages include
+  `body_html`, rejection details and attachment references (no download). Older linked
+  submissions appear under a labelled `older_message_history`. A sender that is not
+  positively `APPLE`/`DEVELOPER` is never treated as Apple.
+- **Connection**: `authentication` is `ok`, `missing`, `rejected` or `unreachable`.
+  Only `provider {providerId, name}` is returned (else `"unknown"`); no user, email or
+  cookies. `public_api_configured` reflects whether the server has a public API client,
+  not environment guessing. Scope is the current provider session only.
+
+On 2026-10-05 all five status tools were verified through the Docker sidecar's
+authenticated HTTP MCP endpoint. The current provider's ten apps were retrieved
+without per-app errors or truncation; Kotatsu's iOS rejection and tvOS release
+pending state were distinct. Interceptor and Kotatsu rejection messages and
+reason fields were read successfully. Monitor snapshots/state were unchanged.
+This confirms that session and provider at the time, not other teams or future
+session validity. Missing evidence, unknown version states and ambiguous history
+are reported as incomplete, rather than as no rejection.
 
 ## Authentication status
 

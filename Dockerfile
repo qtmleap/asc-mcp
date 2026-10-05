@@ -20,4 +20,5 @@ ENV HOME=/state
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/asc-mcp"]
-CMD ["serve"]
+# Long-running sidecar by default. Stdio clients explicitly pass "serve".
+CMD ["serve-http", "--addr", "0.0.0.0:8080"]

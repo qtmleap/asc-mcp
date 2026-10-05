@@ -76,7 +76,9 @@ impl Server {
                 .iter()
                 .any(|t| t["name"].as_str() == Some(name))
         {
-            return reviewer.call(name, args).await;
+            return reviewer
+                .call_with_api(name, args, Some(self.api.is_some()))
+                .await;
         }
         let client = self
             .api
@@ -396,5 +398,146 @@ mod tests {
         assert!(!text.starts_with('{'));
         assert!(response["result"].get("structuredContent").is_none());
         expected.assert_calls(1);
+    }
+}
+
+#[cfg(test)]
+mod review_status_tests {
+    use super::*;
+    use crate::reviewer::Reviewer;
+    use httpmock::{Method::GET, MockServer};
+
+    const NEW: [&str; 5] = [
+        "list_review_apps",
+        "get_app_review_status",
+        "get_all_app_review_statuses",
+        "get_app_rejection_details",
+        "get_review_connection_status",
+    ];
+    fn call_request(name: &str, args: Value) -> Value {
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":args}})
+    }
+    fn ready() -> Session {
+        let s = Session::default();
+        s.initialized.store(true, Ordering::Release);
+        s
+    }
+
+    #[tokio::test]
+    async fn reviewer_only_server_exposes_exactly_ten_review_tools() {
+        let mock = MockServer::start();
+        let dir = tempfile::tempdir().unwrap();
+        let server = Server {
+            api: None,
+            reviewer: Some(Reviewer::for_test(&mock.base_url(), dir.path())),
+        };
+        let response = server
+            .dispatch(
+                &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}),
+                &ready(),
+            )
+            .await
+            .unwrap();
+        let tools = response["result"]["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 10);
+        for name in NEW {
+            assert!(tools.iter().any(|t| t["name"] == name), "{name}");
+        }
+        assert!(!tools.iter().any(|t| t["name"] == "list_apps"));
+    }
+
+    #[tokio::test]
+    async fn no_reviewer_means_no_review_status_tools() {
+        let server = Server {
+            api: None,
+            reviewer: None,
+        };
+        let response = server
+            .dispatch(&call_request("list_review_apps", json!({})), &ready())
+            .await
+            .unwrap();
+        assert!(response.get("error").is_some());
+    }
+
+    #[tokio::test]
+    async fn connection_status_reports_actual_public_api_state() {
+        for configured in [false, true] {
+            let mock = MockServer::start();
+            let dir = tempfile::tempdir().unwrap();
+            mock.mock(|w, t| {
+                w.method(GET).path("/olympus/v1/session");
+                t.json_body(json!({"provider":{"providerId":7,"name":"Team"}}));
+            });
+            let server = Server {
+                api: configured.then(|| ApiClient::with_endpoint(&mock.base_url()).unwrap()),
+                reviewer: Some(Reviewer::for_test(&mock.base_url(), dir.path())),
+            };
+            let response = server
+                .dispatch(
+                    &call_request("get_review_connection_status", json!({})),
+                    &ready(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response["result"]["isError"], false);
+            assert_eq!(
+                response["result"]["structuredContent"]["public_api_configured"],
+                configured
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn dispatch_rejects_bad_arguments_before_http() {
+        let mock = MockServer::start();
+        let dir = tempfile::tempdir().unwrap();
+        let any = mock.mock(|w, t| {
+            w.any_request();
+            t.json_body(json!({"data":[]}));
+        });
+        let server = Server {
+            api: None,
+            reviewer: Some(Reviewer::for_test(&mock.base_url(), dir.path())),
+        };
+        for (name, args) in [
+            ("get_app_review_status", json!({"app_id":"abc"})),
+            ("get_app_rejection_details", json!({"app_id":"1","x":2})),
+            ("list_review_apps", json!({"x":1})),
+        ] {
+            let response = server
+                .dispatch(&call_request(name, args), &ready())
+                .await
+                .unwrap();
+            assert_eq!(response["result"]["isError"], true, "{name}");
+        }
+        any.assert_calls(0);
+    }
+
+    #[tokio::test]
+    async fn dispatch_returns_structured_review_status() {
+        let mock = MockServer::start();
+        let dir = tempfile::tempdir().unwrap();
+        for p in [
+            "/iris/v1/apps/9/appStoreVersions",
+            "/iris/v1/apps/9/reviewSubmissions",
+        ] {
+            mock.mock(|w, t| {
+                w.method(GET).path(p);
+                t.json_body(json!({"data":[]}));
+            });
+        }
+        let server = Server {
+            api: None,
+            reviewer: Some(Reviewer::for_test(&mock.base_url(), dir.path())),
+        };
+        let response = server
+            .dispatch(
+                &call_request("get_app_review_status", json!({"app_id":"9"})),
+                &ready(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response["result"]["isError"], false);
+        assert_eq!(response["result"]["structuredContent"]["app_id"], "9");
     }
 }

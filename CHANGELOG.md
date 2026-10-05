@@ -12,6 +12,15 @@ under `## [Unreleased]` until a release is cut.
 ## [Unreleased]
 
 ### Added
+- Five read-only, session-only App Review status tools (`list_review_apps`,
+  `get_app_review_status`, `get_all_app_review_statuses`,
+  `get_app_rejection_details`, `get_review_connection_status`), bringing the
+  reviewer tools to ten. They never write monitor state or log in; limited to
+  the current provider session; rejection history for older submissions is
+  labelled. Live HTTP MCP reads verified on 2026-10-05 for the current provider's
+  ten apps and rejection details for Interceptor and Kotatsu.
+- HTTP sidecar defaults in both Dockerfiles, sidecar setup documentation, and
+  CI smoke coverage for default startup and authenticated MCP initialization.
 - MCP 2026-07-28 protocol support alongside the existing handshake era.
   Modern clients carry their protocol version and capabilities in
   per-request `_meta`, discover the server through the new mandatory

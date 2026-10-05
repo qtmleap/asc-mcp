@@ -59,5 +59,16 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Distroless native binary smoke
         run: docker run --rm asc-mcp-ci:latest version
+      - name: Default HTTP sidecar smoke
+        run: |
+          sidecar_id=$(docker run -d -e ASC_MCP_AUTH_TOKENS=ci-sidecar-token -p 127.0.0.1::8080 asc-mcp-ci:latest)
+          trap 'docker rm -f "$sidecar_id" >/dev/null 2>&1 || true' EXIT
+          sidecar_port=$(docker port "$sidecar_id" 8080/tcp | sed 's/.*://')
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 --max-time 2 "http://127.0.0.1:$sidecar_port/healthz"
+          http_status=$(curl --silent --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' --data '{}' "http://127.0.0.1:$sidecar_port/mcp")
+          test "$http_status" = 401
+          curl --fail --silent --show-error -H 'Authorization: Bearer ci-sidecar-token' -H 'Content-Type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci-sidecar-smoke","version":"1"}}}' \
+            "http://127.0.0.1:$sidecar_port/mcp" | python3 -c 'import json,sys; response=json.load(sys.stdin); assert response["result"]["serverInfo"]["name"] == "asc-mcp"'
       - name: Compose configuration
         run: ./script/docker/compose.sh standalone config -q
