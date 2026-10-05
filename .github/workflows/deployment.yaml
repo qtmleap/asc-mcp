@@ -1,7 +1,7 @@
 name: Deployment
 on:
   push:
-    branches: [main, master]
+    branches: [master]
     tags: ['v*']
   workflow_dispatch:
 permissions:
@@ -23,7 +23,7 @@ jobs:
     name: Build ${{ matrix.platform }}
     needs: verify
     # Manual runs on development branches must not replace release tags.
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
       matrix:

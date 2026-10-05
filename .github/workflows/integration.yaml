@@ -1,9 +1,9 @@
 name: Integration
 on:
   push:
-    branches-ignore: [main, master]
+    branches-ignore: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -17,7 +17,7 @@ permissions:
   contents: read
 concurrency:
   group: integration-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 jobs:
   test:
     strategy:

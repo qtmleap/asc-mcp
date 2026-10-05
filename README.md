@@ -217,7 +217,7 @@ unread message cannot be marked seen accidentally. Details:
 - `.github/workflows/integration.yaml` validates development branches and pull
   requests: formatting, strict Clippy, tests, release builds and CLI smoke on
   Linux/macOS/Windows, plus a distroless Docker build and Compose validation.
-- `.github/workflows/deployment.yaml` runs on `main`/`master` pushes, `v*` tags
+- `.github/workflows/deployment.yaml` runs on `master` pushes, `v*` tags
   and manual dispatch. It reuses Linux integration checks before publishing;
   three-OS validation remains in the PR workflow. Native
   amd64/arm64 runners build and smoke each image, then publish one multi-platform
