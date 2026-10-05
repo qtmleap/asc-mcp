@@ -2,6 +2,18 @@
 
 An MCP (Model Context Protocol) server for Apple App Store Connect.
 
+## Reviewer monitoring additions in this fork
+
+This fork adds browser-free App Review message reads using a fastlane CLI-created Apple ID session, plus MCP tools for checking new reviewer messages and acknowledging the exact analysed snapshot. The official API/JWT tools remain available when API-key credentials are configured.
+
+- Implementation: Go; fastlane monitor/authentication helper: Ruby and a shell launcher.
+- Reviewer-only mode does not require an App Store Connect API key.
+- Sessions, message snapshots and acknowledgement state are stored locally outside the repository.
+- The legacy reply tool is experimental and disabled by default. Reply attachments are not implemented.
+- Tests/build and MCP startup are verified; live message reading awaits valid Apple ID CLI authentication. No live reply has been sent by this fork.
+
+See [reviewer setup and verification](script/reviewer/README.md). Original project: [antisynthesis/asc-mcp](https://github.com/antisynthesis/asc-mcp).
+
 ## Features
 
 **356 MCP tools** covering the major capability areas of the App Store
