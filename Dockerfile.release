@@ -1,6 +1,7 @@
 # Runtime image for a Linux release built against glibc <= 2.36.
 FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --chown=65532:65532 asc-mcp /usr/local/bin/asc-mcp
+COPY LICENSE /usr/share/licenses/asc-mcp/LICENSE
 ENV HOME=/home/nonroot
 USER 65532:65532
 EXPOSE 8080

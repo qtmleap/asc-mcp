@@ -9,3 +9,4 @@
 data/go_request_probes.json
 data/compatibility_provenance.json
 data/public_coverage.json
+!LICENSE

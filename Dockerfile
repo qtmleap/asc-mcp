@@ -15,6 +15,7 @@ RUN --mount=type=bind,source=.,target=/src,readonly \
 FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=builder /out/asc-mcp /usr/local/bin/asc-mcp
 COPY --from=builder --chown=65532:65532 /out/state /state
+COPY LICENSE /usr/share/licenses/asc-mcp/LICENSE
 ENV HOME=/state
 USER 65532:65532
 EXPOSE 8080
