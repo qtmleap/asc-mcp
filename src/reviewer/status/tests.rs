@@ -395,6 +395,44 @@ async fn batch_stops_remaining_after_auth_failure() {
     assert_eq!(out["not_checked"], json!(["3"]));
     third.assert_calls(0);
 }
+
+#[tokio::test]
+async fn batch_continues_after_per_app_forbidden() {
+    let server = MockServer::start();
+    let (_dir, r) = setup(&server);
+    setup_batch(&server, &["1", "2"]);
+    server.mock(|w, t| {
+        w.method(GET).path("/iris/v1/apps/1/appStoreVersions");
+        t.status(403);
+    });
+    mount_app(&server, "2", vec![], vec![]);
+    let out = r
+        .call("get_all_app_review_statuses", &json!({}))
+        .await
+        .unwrap();
+    assert_eq!(out["complete"], false);
+    assert_eq!(out["not_checked"], json!([]));
+    assert_eq!(out["apps"][0]["app_id"], "2");
+    assert!(
+        out["errors"][0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("reviewer_forbidden")
+    );
+}
+
+#[test]
+fn session_operational_failures_are_not_missing_authentication() {
+    for code in [
+        "reviewer_session_busy",
+        "reviewer_session_lock_unwritable",
+        "reviewer_session_lock_permissions",
+        "reviewer_session_worker_failed",
+    ] {
+        assert_eq!(classify(code), "unreachable");
+        assert!(!authentication_error(&anyhow::anyhow!(code.to_owned())));
+    }
+}
 fn catch_all_for<'a>(server: &'a MockServer, path: &str) -> httpmock::Mock<'a> {
     let path = path.to_owned();
     server.mock(move |w, t| {
@@ -589,7 +627,7 @@ async fn connection_status_whitelists_provider_and_hides_identity() {
     ] {
         assert!(!text.contains(banned), "{banned}");
     }
-    assert_eq!(files(&dir), ["session.cookie"]);
+    assert_eq!(files(&dir), [".session.lock", "session.cookie"]);
 }
 
 #[tokio::test]
@@ -618,8 +656,8 @@ async fn connection_status_provider_missing_or_malformed_is_unknown() {
 async fn connection_status_classifies_failures_without_leaking() {
     for (status, expected) in [
         (401, "rejected"),
-        (403, "rejected"),
-        (302, "rejected"),
+        (403, "forbidden"),
+        (302, "redirected"),
         (500, "unreachable"),
         (503, "unreachable"),
     ] {
@@ -1073,7 +1111,7 @@ async fn status_tools_never_write_monitor_state() {
     ] {
         let _ = r.call(tool, &args).await;
     }
-    assert_eq!(files(&dir), ["session.cookie"]);
+    assert_eq!(files(&dir), [".session.lock", "session.cookie"]);
 }
 
 #[tokio::test]

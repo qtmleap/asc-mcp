@@ -51,8 +51,11 @@ Apple. Reviewer tools use an existing private
 need the team key and credential variables described in the main README.
 
 Compose mounts `credentials/` read-only at `/run/asc-mcp` and mounts a separate
-persistent `state/` directory at `/state`. Cookies reload on each read, so a
-renewed session file takes effect without rebuilding the image. Changes to
+persistent `state/` directory at `/state`. Updated response cookies persist as a
+private `session.state.json` overlay in that directory; neither the source cookies
+nor p8 files are written. The source fingerprint is checked on each read, so a
+renewed session file takes effect without rebuilding the image. Apple can still
+reject a session and require an explicit login. Changes to
 `runtime.env` require recreating the service. Neither the Docker socket nor a
 source/workspace mount is required by this sidecar.
 

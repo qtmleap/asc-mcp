@@ -11,6 +11,12 @@ under `## [Unreleased]` until a release is cut.
 
 ## [Unreleased]
 
+### Fixed
+- Persist reviewer response cookie rotation/deletion privately across requests
+  and process restarts, preserving read-only credential mounts and new logins.
+- Distinguish unauthenticated (401), forbidden (403), login redirects and other
+  redirects without exposing response bodies, cookies or redirect destinations.
+
 ### Added
 - Five read-only, session-only App Review status tools (`list_review_apps`,
   `get_app_review_status`, `get_all_app_review_statuses`,

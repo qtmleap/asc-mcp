@@ -185,10 +185,24 @@ fn superseded_by(version: &Value, all: &[Value]) -> Result<Option<String>, Strin
     Ok(newest.map(|(_, id)| id.to_owned()))
 }
 fn classify(error: &str) -> &'static str {
-    if error.contains("reviewer_session_") || error.contains("private_file") {
+    let code = error.split(':').next().unwrap_or(error).trim();
+    if matches!(
+        code,
+        "reviewer_session_required"
+            | "reviewer_session_invalid"
+            | "reviewer_session_permissions"
+            | "reviewer_private_file_required"
+            | "reviewer_private_file_too_large"
+            | "reviewer_private_file_unreadable"
+            | "reviewer_private_file_changed"
+    ) {
         "missing"
     } else if error.contains("reviewer_auth_required") {
         "rejected"
+    } else if error.contains("reviewer_forbidden") {
+        "forbidden"
+    } else if error.contains("reviewer_unexpected_redirect") {
+        "redirected"
     } else {
         "unreachable"
     }

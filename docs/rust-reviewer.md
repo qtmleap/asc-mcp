@@ -32,6 +32,23 @@ rejected. Import stores JSON at
 inside a mode 700 directory. Import converts a session; it does not verify that
 Apple will accept it. Cookies reload before every request.
 
+Responses can rotate or delete cookies through `Set-Cookie`. Accepted root-path
+Apple cookies are merged into `session.state.json` in the private directory,
+with mode 600. The imported source stays unchanged, including Docker's read-only
+credentials mount. The source's SHA-256 fingerprint identifies the login: importing
+a different source resets the overlay, while deleting the source disables access.
+Deleting all cookies in an overlay does not restore the original cookies.
+Malformed or insecure overlay files fail closed instead of reviving the original
+cookies; explicit local recovery is required if such a file is damaged.
+An independent OS lock protects read/merge/write across processes. Unrelated
+concurrent updates are preserved; a stale response cannot overwrite a new imported
+login or delete a newer cookie value. Concurrent replacements of the same cookie
+use the last completed save; use one shared state directory per imported session.
+Refresh is opportunistic, not an Apple token-refresh API or a guaranteed session
+extension. A session already rejected by Apple may require login and 2FA again.
+Save failures print a fixed warning without secrets; they do not retry requests
+or change the result of an uncertain POST.
+
 Reviewer tools activate when the private session exists or
 `ASC_REVIEW_COOKIE_PATH`, `ASC_REVIEW_APP_ID`, or `ASC_REVIEWER_ONLY` is set.
 `ASC_REVIEW_APP_ID` selects the monitored app; the previous monitor's default,
@@ -42,8 +59,10 @@ The conversation and monitor tools are `list_reviewer_threads`, `get_reviewer_me
 `get_legacy_reviewer_context`, `check_reviewer_updates`, and
 `acknowledge_reviewer_updates`. Iris reads follow up to 20 pages, bounded to
 8 MiB, with pagination restricted to the same origin and exact endpoint path.
-Redirects and HTTP 401/403 require renewed authentication; response bodies and
-request errors are not included in errors. Credential fields in returned JSON
+HTTP 401 and known Apple login redirects report `reviewer_auth_required`.
+HTTP 403 reports `reviewer_forbidden`, without asserting expiry; other redirects
+report `reviewer_unexpected_redirect` and are never followed. Response bodies,
+redirect targets and request errors are not included in errors. Credential fields in returned JSON
 are redacted. Message HTML is untrusted material.
 
 `reviewer-check` stores a fresh private snapshot and returns its SHA-256
@@ -100,7 +119,8 @@ cap: all pages are followed, and failure to complete is explicit.
   `body_html`, rejection details and attachment references (no download). Older linked
   submissions appear under a labelled `older_message_history`. A sender that is not
   positively `APPLE`/`DEVELOPER` is never treated as Apple.
-- **Connection**: `authentication` is `ok`, `missing`, `rejected` or `unreachable`.
+- **Connection**: `authentication` is `ok`, `missing`, `rejected`, `forbidden`,
+  `redirected` or `unreachable`. A per-app 403 does not stop the remaining batch.
   Only `provider {providerId, name}` is returned (else `"unknown"`); no user, email or
   cookies. `public_api_configured` reflects whether the server has a public API client,
   not environment guessing. Scope is the current provider session only.

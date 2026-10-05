@@ -18,6 +18,9 @@ use std::{
 };
 use url::Url;
 
+#[cfg(test)]
+mod refresh_tests;
+mod session;
 mod status;
 
 const MAX_BODY: usize = 8 * 1024 * 1024;
@@ -34,7 +37,7 @@ pub struct Reviewer {
     limits: status::Limits,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Cookie {
     name: String,
     value: String,
@@ -430,14 +433,21 @@ impl Reviewer {
         payload: Option<Value>,
         csrf: Option<&HeaderMap>,
     ) -> Result<(Value, HeaderMap)> {
-        let cookies = parse_cookies(&private_read(&self.cookie_path, MAX_SESSION)?)?;
-        let mut cookie = reqwest::header::HeaderValue::from_str(&cookie_header(&cookies)?)
+        if url.origin() != self.origin.origin()
+            || !url.username().is_empty()
+            || url.password().is_some()
+        {
+            bail!("reviewer_untrusted_origin");
+        }
+        let snapshot = session::load(self.cookie_path.clone(), self.root.clone()).await?;
+        let cookies = &snapshot.cookies;
+        let mut cookie = reqwest::header::HeaderValue::from_str(&cookie_header(cookies)?)
             .map_err(|_| anyhow::anyhow!("reviewer_session_invalid"))?;
         cookie.set_sensitive(true);
         let post = method == Method::POST;
         let mut builder = self
             .client
-            .request(method, url)
+            .request(method, url.clone())
             .header("Cookie", cookie)
             .header("Accept", "application/json")
             .header("Content-Type", "application/json");
@@ -460,9 +470,53 @@ impl Reviewer {
                 "reviewer_request_failed: HTTP connection failed"
             })
         })?;
+        let updates = session::updates(response.headers(), &url, cookies);
+        let redaction_cookies: Vec<Cookie> = cookies
+            .iter()
+            .cloned()
+            .chain(updates.iter().filter_map(|u| u.cookie().cloned()))
+            .collect();
+        if !updates.is_empty()
+            && session::persist(
+                self.cookie_path.clone(),
+                self.root.clone(),
+                snapshot.generation,
+                updates,
+            )
+            .await
+            .is_err()
+        {
+            eprintln!("reviewer_session_refresh_unwritable: updated cookies could not be saved");
+        }
         let status = response.status();
-        if status.is_redirection() || matches!(status.as_u16(), 401 | 403) {
-            bail!("reviewer_auth_required: Apple ID session or permissions rejected");
+        if status.as_u16() == 401 {
+            bail!("reviewer_auth_required: HTTP 401 unauthenticated");
+        }
+        if status.as_u16() == 403 {
+            bail!("reviewer_forbidden: HTTP 403 access denied; session expiry is not established");
+        }
+        if status.is_redirection() {
+            let login = response
+                .headers()
+                .get("location")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|s| url.join(s).ok())
+                .is_some_and(|target| {
+                    target.username().is_empty()
+                        && target.password().is_none()
+                        && ((target.scheme() == "https"
+                            && matches!(
+                                target.host_str(),
+                                Some("idmsa.apple.com" | "appleid.apple.com")
+                            ))
+                            || (target.origin() == self.origin.origin()
+                                && (target.path() == "/login"
+                                    || target.path().starts_with("/login/"))))
+                });
+            if login {
+                bail!("reviewer_auth_required: login_redirect");
+            }
+            bail!("reviewer_unexpected_redirect: redirect not followed");
         }
         if !status.is_success() {
             if post && status.is_server_error() {
@@ -473,7 +527,8 @@ impl Reviewer {
             }
             bail!("reviewer_api_unavailable: HTTP {}", status.as_u16());
         }
-        let headers = response.headers().clone();
+        let mut headers = response.headers().clone();
+        headers.remove(reqwest::header::SET_COOKIE);
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| {
             anyhow::anyhow!(if post {
@@ -502,7 +557,7 @@ impl Reviewer {
             })
         })?;
         redact(&mut data);
-        redact_cookie_values(&mut data, &cookies);
+        redact_cookie_values(&mut data, &redaction_cookies);
         Ok((data, headers))
     }
     fn url(&self, path: &str, query: &[(&str, &str)]) -> Result<Url> {
