@@ -38,12 +38,15 @@ a bounded challenge, 100 million counters, and 30 seconds of computation.
 
 ## Validation and limits
 
-This implementation has **not been exercised against a real Apple ID**. No real
-passwords or cookies were read during development, and no live authentication
-requests were made. Successful fixture tests demonstrate protocol arithmetic and
-local validation, not successful Apple account authentication. Apple's
-undocumented flow may change or reject this client. Validate it by running the
-command yourself before relying on it operationally.
+On 2026-10-05, a user completed native CLI login with a real account and the
+Rust Docker client successfully read Interceptor's App Review messages. Local
+snapshot acknowledgement also succeeded. Passwords and verification codes were
+entered by the user in the terminal and were not exposed to the assistant.
+This confirms one account/session workflow; the other supported 2FA/legacy
+paths have not all been exercised live. Apple's undocumented flow may change,
+and sessions can expire or be revoked. Legacy reply delivery and official API
+key access remain unverified. Existing private sessions can still be converted
+with `reviewer-import-session` without logging in again.
 
 Synthetic deterministic fixtures independently calculated with Python's hashlib
 and integer arithmetic verify both password derivations and the SRP client

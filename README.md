@@ -77,10 +77,66 @@ and [submission roles](https://developer.apple.com/help/app-store-connect/manage
 
 Reviewer conversations still require a separately authenticated session. After
 native CLI login, place the private `session.cookie` in that credentials directory
-(mode 600), then restart the service. No monitor starts interactive login or
+(mode 600). Cookies are reloaded on each reviewer call. No monitor starts interactive login or
 sends replies automatically. The endpoint requires the bearer token stored in
 `runtime.env`. From containers on the shared stack use `http://asc-mcp:8080/mcp`;
 from this Mac use `http://127.0.0.1:8878/mcp`.
+
+## Capabilities and required credentials
+
+The Apple ID session below means an authenticated **App Store Connect web
+session**, not this chat or an official API-key JWT. The current server exposes
+five reviewer tools with a session alone. It adds the 356 public API tools when
+team API credentials are configured; actual access depends on Apple's role
+permissions. Having a key does not grant every tool permission.
+
+| Task | Credentials / environment | Current implementation and verification |
+| --- | --- | --- |
+| List App Review conversations | Apple ID session with access to the app | `list_reviewer_threads`; implemented |
+| Read Apple/developer messages, dates, rejection and attachment references | Same session | `get_reviewer_messages`; implemented; attachment file download is not implemented |
+| Check new or changed Apple replies | Same session | `check_reviewer_updates`; live read confirmed for Interceptor on 2026-10-05 |
+| Record that a checked snapshot has been reviewed | Local monitor state and exact `snapshot_token` | `acknowledge_reviewer_updates`; live workflow confirmed; changes local state only, not Apple's read status |
+| Inspect old reply context | Same session | `get_legacy_reviewer_context`; experimental legacy endpoint; not live verified |
+| Send a reply to App Review | Same session plus `ASC_REVIEW_ENABLE_LEGACY_REPLY=true` | `reply_reviewer_message`; experimental, disabled by default, not live verified; no reply attachments |
+| Read/update app metadata, versions and review information; upload screenshots/previews | Team `.p8`, Key ID, Issuer ID and sufficient role | Public API tools implemented and tested offline; live access pending |
+| Upload an already-built artifact, select a build, submit for review | Same team API credentials; App Manager for submission | Implemented and tested offline; live upload/submission pending |
+| Manage TestFlight, provisioning certificates/profiles, commerce, Game Center, reports and Xcode Cloud | Same team API credentials with permissions for the requested endpoint | Implemented public tools; some tasks require roles beyond App Manager; live access pending |
+| Build/archive an Xcode project, sign locally and export an IPA | A Mac with Xcode, signing certificate **and its private key**, provisioning profile and project | Not implemented as MCP tools; putting these credentials in the container does not enable these steps |
+
+An API `.p8` authorizes official API calls; it is not an app-signing private key.
+The current implementation uses team-key JWTs with Issuer ID. Individual API keys
+are not supported. App Manager is the intended role for app metadata, build
+selection and resubmission; finance/account administration may require different
+roles. Team keys cannot be restricted to only Interceptor. Apple's role sources
+are linked in the Docker setup above.
+
+The reviewer tools do not expose all App Store Connect features just because an
+Apple ID session can access them in the website. In particular, this session-only
+client does not implement general metadata edits, build upload or submission.
+App Review conversations are also distinct from public App Store ratings/reviews.
+The `.p8` does not replace reviewer-session authentication.
+
+### Session setup and renewal
+
+Run `reviewer-login` yourself in a terminal; supply the Apple ID, password and
+2FA code there. Successful native login saves a private session, never the
+password. For Docker, copy that session to
+`~/.config/asc-mcp/credentials/session.cookie` with mode 600. The running reviewer
+reloads cookies on each call, so replacing the file does not require a rebuild.
+When changing API credential environment variables, recreate the container with
+`./script/docker/compose.sh stack up -d asc-mcp`.
+
+A session can expire or be revoked by Apple. Monitoring reports authentication
+failure and does not automatically prompt for credentials; rerun terminal login
+and replace the session when required. The configured 30-minute monitor only
+checks, analyses and acknowledges reviewed snapshots. It never automatically
+replies, uploads a build or submits an app.
+
+On 2026-10-05, user-completed native login and authenticated reviewer reads through
+the Rust Docker client were confirmed, including the latest Apple reply and local
+snapshot acknowledgement. This validates that account/session at that time, not
+every authentication branch, every Apple ID or future session validity. The
+public `.p8` API calls and legacy reply delivery have not been live verified.
 
 ## Official API tools
 
@@ -128,9 +184,9 @@ asc-mcp reviewer-check --ack '<snapshot_token>'
 
 The CLI login implements native Apple SRP, bounded hashcash, modern two-factor
 and legacy two-step verification, and verifies an App Store Connect web session
-before saving private canonical cookies. **Live Apple authentication and reviewer
-access remain unverified** until a real account completes authentication. See
-[login implementation limits](docs/rust-login.md).
+before saving private canonical cookies. Native login and authenticated reviewer
+reads were confirmed for this project on 2026-10-05; other authentication paths
+and reply delivery remain unverified. See [login implementation limits](docs/rust-login.md).
 
 Reviewer-only MCP requires `ASC_REVIEW_COOKIE_PATH` (or the default private
 session). It does not require official API-key credentials. Optional tools:

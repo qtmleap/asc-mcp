@@ -74,11 +74,12 @@ web-session check before saving canonical private cookies. Password entry is
 interactive and hidden; legacy two-step authentication is also supported. Monitor
 checks and MCP calls never start login or request verification codes.
 
-This login implementation and the reviewer endpoints have not been live tested
-against an authenticated account. Existing fastlane sessions previously tried
-in this migration were rejected. Authentication still requires human verification
-with a working account; implementation and local tests do not prove Apple accepts
-the session.
+On 2026-10-05, user-completed native login and authenticated App Review reads
+for Interceptor were confirmed through the Rust Docker client, followed by exact
+snapshot acknowledgement. Earlier cached fastlane sessions were rejected; a fresh
+login resolved the authentication block. This does not verify legacy reply
+sending, every login path or future session validity. A session can expire and
+require renewed human authentication; monitoring never starts login itself.
 
 Rust [ipakeep](https://github.com/seifreed/ipakeep/) provides GrandSlam SRP and
 2FA for App Store purchases/downloads with Anisette support. Its documented
