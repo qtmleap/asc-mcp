@@ -212,6 +212,25 @@ releases on process exit. Acknowledgements require a snapshot token so a newer,
 unread message cannot be marked seen accidentally. Details:
 [reviewer monitoring](docs/rust-reviewer.md).
 
+## CI and deployment
+
+- `.github/workflows/integration.yaml` validates development branches and pull
+  requests: formatting, strict Clippy, tests, release builds and CLI smoke on
+  Linux/macOS/Windows, plus a distroless Docker build and Compose validation.
+- `.github/workflows/deployment.yaml` runs on `main`/`master` pushes, `v*` tags
+  and manual dispatch. It reuses integration checks before publishing. Native
+  amd64/arm64 runners build and smoke each image, then publish one multi-platform
+  manifest to `ghcr.io/qtmleap/asc-mcp` with package-version and commit tags;
+  default-branch builds also update `latest`. Other manual branch runs cannot
+  publish release tags. Release tags must match the version in `Cargo.toml`.
+- `.github/workflows/release.yml` packages native OS binaries for version tags;
+  manual snapshot runs only upload workflow artifacts.
+
+GHCR authentication uses GitHub Actions' `GITHUB_TOKEN` with `packages: write`;
+no Apple API keys, Apple ID sessions or signing credentials are needed for CI/CD.
+This deployment distributes the MCP image; it does not deploy Interceptor to
+App Store Connect or replace running local containers automatically.
+
 ## Migration verification
 
 - 3,924 offline HTTP request comparisons span all 356 original tools.
