@@ -12,6 +12,8 @@ under `## [Unreleased]` until a release is cut.
 ## [Unreleased]
 
 ### Fixed
+- Finalize uploaded assets with MD5 checksums accepted by App Store Connect,
+  including build uploads, instead of rejected SHA-256 checksums.
 - Persist reviewer response cookie rotation/deletion privately across requests
   and process restarts, preserving read-only credential mounts and new logins.
 - Distinguish unauthenticated (401), forbidden (403), login redirects and other

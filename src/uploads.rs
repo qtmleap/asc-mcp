@@ -4,7 +4,6 @@ use anyhow::{Result, anyhow, bail, ensure};
 use base64::{Engine, engine::general_purpose};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{io::Read, path::Path, time::Duration};
 
 pub const MAX_UPLOAD_SIZE: usize = 600 * 1024 * 1024;
@@ -405,13 +404,13 @@ async fn handle_inner(
             .map_err(|_| anyhow!("reservation contains invalid upload operations"))?;
     perform_upload(&client.http, &operations, &body, allow_local).await?;
     let mut commit_attributes = json!({"uploaded":true});
-    let hash = hex::encode(Sha256::digest(&body));
+    // Apple asset finalization accepts the MD5 checksum of the complete file.
+    let hash = format!("{:x}", md5::compute(&body));
     if checksum == 0 {
         commit_attributes["sourceFileChecksum"] = json!(hash);
     }
     if checksum == 1 {
-        commit_attributes["sourceFileChecksums"] =
-            json!({"file":{"hash":hash,"algorithm":"SHA_256"}});
+        commit_attributes["sourceFileChecksums"] = json!({"file":{"hash":hash,"algorithm":"MD5"}});
     }
     let response = client
         .request(
@@ -528,10 +527,10 @@ mod tests {
                     then.status(204);
                 })
                 .await;
-            let hash = hex::encode(Sha256::digest(b"abcdef"));
+            let hash = "e80b5017098950fc58aad83c8c14978e";
             let mut attrs = json!({"uploaded":true});
             if checksums {
-                attrs["sourceFileChecksums"] = json!({"file":{"hash":hash,"algorithm":"SHA_256"}});
+                attrs["sourceFileChecksums"] = json!({"file":{"hash":hash,"algorithm":"MD5"}});
             } else {
                 attrs["sourceFileChecksum"] = json!(hash);
             }
