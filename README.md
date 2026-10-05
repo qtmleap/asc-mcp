@@ -49,6 +49,9 @@ contains only Cargo manifests, Rust source and embedded runtime data.
 
 # Start/rebuild only this service without restarting other development services
 ./script/docker/compose.sh stack up -d --build asc-mcp
+
+# Codex stdio MCP uses the same running container, credentials and state.
+codex mcp add asc-review -- /absolute/path/asc-mcp/script/docker/mcp.sh
 ```
 
 The helper creates `~/.config/asc-mcp/runtime.env` with a random HTTP bearer token
