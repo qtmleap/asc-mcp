@@ -123,15 +123,17 @@ The `.p8` does not replace reviewer-session authentication.
 
 Run `reviewer-login` yourself in a terminal; supply the Apple ID, password and
 2FA code there. Successful native login saves a private session, never the
-password. For Docker, copy that session to
-`~/.config/asc-mcp/credentials/session.cookie` with mode 600. The running reviewer
-reloads cookies on each call, so replacing the file does not require a rebuild.
+password. For Docker, run `./script/docker/reviewer-login.sh stack` (or
+`standalone`) in an interactive terminal. The disposable container saves the
+confirmed session directly to `~/.config/asc-mcp/credentials/session.cookie`
+with mode 600; no manual copying is needed. The running reviewer reloads cookies
+on each call, so replacing the file does not require a rebuild.
 When changing API credential environment variables, recreate the container with
 `./script/docker/compose.sh stack up -d asc-mcp`.
 
 A session can expire or be revoked by Apple. Monitoring reports authentication
 failure and does not automatically prompt for credentials; rerun terminal login
-and replace the session when required. The configured 30-minute monitor only
+when required. The configured 30-minute monitor only
 checks, analyses and acknowledges reviewed snapshots. It never automatically
 replies, uploads a build or submits an app.
 

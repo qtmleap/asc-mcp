@@ -59,6 +59,31 @@ reject a session and require an explicit login. Changes to
 `runtime.env` require recreating the service. Neither the Docker socket nor a
 source/workspace mount is required by this sidecar.
 
+## Log in or renew the reviewer session
+
+Run the native Rust login in a disposable Docker container from an interactive
+terminal:
+
+```sh
+./script/docker/reviewer-login.sh stack
+# For a standalone installation:
+./script/docker/reviewer-login.sh standalone
+```
+
+Enter the Apple ID, password, and any required 2FA code in that terminal.
+The helper can also be launched by a local agent with an interactive terminal;
+passwords and codes must not be passed in MCP arguments, chat, or command lines.
+It refuses noninteractive execution, so scheduled checks cannot start login.
+
+Only this one-off container mounts the private credentials directory writable
+at the login's save path. The running service keeps its read-only credentials
+mount. A successfully confirmed login atomically replaces `session.cookie`
+in the existing host credentials directory; the monitoring service uses it on
+the next request without restarting. A failed login leaves the existing file
+intact. The one-off container is removed when login ends and publishes no ports.
+No host Rust installation or manual Cookie copying is required. Build the image
+with the startup commands above before using the helper.
+
 A bare `docker run` with the image's default command must supply
 `ASC_MCP_AUTH_TOKENS`; without it the non-loopback HTTP listener refuses to
 start. Browser clients also require explicitly configured allowed origins.
