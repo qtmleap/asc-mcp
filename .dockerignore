@@ -1,0 +1,11 @@
+*
+!Cargo.toml
+!Cargo.lock
+!src/
+!src/**
+!data/
+!data/**
+# Offline Go fixtures are tests, not embedded in the shipped executable.
+data/go_request_probes.json
+data/compatibility_provenance.json
+data/public_coverage.json

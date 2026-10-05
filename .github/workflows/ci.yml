@@ -34,3 +34,21 @@ jobs:
         run: cargo build --release --locked
       - name: CLI smoke
         run: cargo run --locked -- version
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: asc-mcp-ci:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Distroless native binary smoke
+        run: docker run --rm asc-mcp-ci:latest version
+      - name: Compose configuration
+        run: ./script/docker/compose.sh standalone config -q

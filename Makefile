@@ -16,3 +16,9 @@ e2e:
 	cargo test --test protocol_smoke --locked
 clean:
 	cargo clean
+
+.PHONY: docker stack
+docker:
+	./script/docker/compose.sh standalone
+stack:
+	./script/docker/compose.sh stack

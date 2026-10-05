@@ -32,6 +32,53 @@ asc-mcp serve-http --addr :8080 --auth-tokens "$ASC_MCP_AUTH_TOKENS" \
 Non-loopback listeners require bearer tokens. Browser origins must be explicitly
 allowed. Optional native TLS uses paired `--tls-cert` / `--tls-key` flags.
 
+## Docker and shared LocalGPT stack
+
+The Docker build uses BuildKit read-only source bind mounts and Cargo cache
+mounts. The runtime is nonroot `distroless/cc-debian12` with no shell or build
+toolchain; private keys/cookies are never copied into the image. The build context
+contains only Cargo manifests, Rust source and embedded runtime data.
+
+```sh
+# Standalone server, loopback HTTP endpoint at http://127.0.0.1:8878/mcp
+./script/docker/compose.sh standalone
+
+# LocalGPT + LocalMCP + asc-mcp in the existing LocalGPT Compose project
+# LOCALGPT_DIR defaults to the sibling ../local-gpt checkout.
+./script/docker/compose.sh stack
+
+# Start/rebuild only this service without restarting other development services
+./script/docker/compose.sh stack up -d --build asc-mcp
+```
+
+The helper creates `~/.config/asc-mcp/runtime.env` with a random HTTP bearer token
+and your host UID/GID. It never overwrites an existing config. The credentials
+bind is read-only; monitor state uses a separate writable bind. The root
+filesystem is read-only. Set `ASC_MCP_CONFIG_DIR` for a different private config
+location. Docker Compose 2.30+ and BuildKit are required.
+
+Place the team key at `~/.config/asc-mcp/credentials/AuthKey.p8` (mode 600), then
+append the following to the private `runtime.env`:
+
+```dotenv
+ASC_ISSUER_ID=your-issuer-id
+ASC_KEY_ID=your-key-id
+ASC_PRIVATE_KEY_PATH=/run/asc-mcp/AuthKey.p8
+```
+
+For metadata/build selection/resubmission use a **Team Key with App Manager**
+access. Team keys apply across all apps; the current JWT implementation requires
+an Issuer ID and does not support individual keys. See Apple's
+[key creation](https://developer.apple.com/help/app-store-connect/get-started/app-store-connect-api)
+and [submission roles](https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/submit-an-app).
+
+Reviewer conversations still require a separately authenticated session. After
+native CLI login, place the private `session.cookie` in that credentials directory
+(mode 600), then restart the service. No monitor starts interactive login or
+sends replies automatically. The endpoint requires the bearer token stored in
+`runtime.env`. From containers on the shared stack use `http://asc-mcp:8080/mcp`;
+from this Mac use `http://127.0.0.1:8878/mcp`.
+
 ## Official API tools
 
 All **356 original public tool names** are retained. Areas include app metadata,
