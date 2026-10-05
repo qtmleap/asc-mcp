@@ -1,33 +1,13 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
-
+FROM rust:1.99-slim AS builder
 WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY data ./data
+RUN cargo build --release --locked
 
-# Copy go mod files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /asc-mcp ./cmd/asc-mcp
-
-# Runtime stage
-FROM alpine:3.19
-
-# Add CA certificates for HTTPS
-RUN apk --no-cache add ca-certificates
-
-WORKDIR /
-
-# Copy binary from builder
-COPY --from=builder /asc-mcp /asc-mcp
-
-# Run as non-root user
-RUN adduser -D -g '' appuser
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* && useradd --create-home --uid 10001 appuser
+COPY --from=builder /app/target/release/asc-mcp /usr/local/bin/asc-mcp
 USER appuser
-
-ENTRYPOINT ["/asc-mcp"]
+ENTRYPOINT ["/usr/local/bin/asc-mcp"]
+CMD ["serve"]

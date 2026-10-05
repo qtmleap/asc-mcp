@@ -1,0 +1,6 @@
+//go:build migration_export
+
+package api
+import("net/http";"time")
+// MigrationCaptureClient is installed only while the offline exporter runs.
+func MigrationCaptureClient(t http.RoundTripper) *Client {return &Client{httpClient:&http.Client{Transport:t},baseURL:BaseURL,tokenProvider:&TokenProvider{token:"offline-fixture",expiresAt:time.Now().Add(time.Hour)}}}

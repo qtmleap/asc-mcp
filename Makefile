@@ -1,37 +1,18 @@
-.PHONY: all build clean test lint fmt vet install run e2e
-
-BINARY_NAME=asc-mcp
-BUILD_DIR=bin
-GO=go
-
+.PHONY: all build test lint fmt install run e2e clean
 all: build
-
 build:
-	@./script/build.zsh
-
-clean:
-	@rm -rf $(BUILD_DIR)
-	@$(GO) clean
-
+	cargo build --release --locked
 test:
-	@./script/test.zsh
-
+	cargo test --all-targets --locked
 lint:
-	@./script/lint.zsh
-
+	cargo clippy --all-targets --locked -- -D warnings
 fmt:
-	@$(GO) fmt ./...
-
-vet:
-	@$(GO) vet ./...
-
+	cargo fmt --all
 install:
-	@./script/install.zsh
-
-run: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) serve
-
-e2e: build
-	@./e2e/e2e.zsh
-
-.DEFAULT_GOAL := build
+	cargo install --path . --locked
+run:
+	cargo run --locked -- serve
+e2e:
+	cargo test --test protocol_smoke --locked
+clean:
+	cargo clean

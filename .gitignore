@@ -37,3 +37,11 @@ bin/
 # Claude Code settings
 .claude/
 dist/
+
+# Rust build output and private reviewer state
+/target/
+*.cookie
+/state.json
+/messages.json
+*.p8
+*.key
