@@ -31,16 +31,25 @@ type Dispatcher struct {
 // NewDispatcher constructs a Dispatcher backed by an authenticated
 // App Store Connect API client.
 func NewDispatcher(cfg *config.Config) (*Dispatcher, error) {
-	client, err := api.NewClient(cfg.IssuerID, cfg.KeyID, cfg.PrivateKeyPath)
-	if err != nil {
-		return nil, err
+	var client *api.Client
+	var registry *tools.Registry
+	if cfg.IssuerID == "" && cfg.KeyID == "" && cfg.PrivateKeyPath == "" && cfg.ReviewerCookiePath != "" {
+		registry = tools.NewReviewerRegistry(cfg.ReviewerCookiePath, cfg.EnableLegacyReviewerReply)
+	} else {
+		var err error
+		client, err = api.NewClient(cfg.IssuerID, cfg.KeyID, cfg.PrivateKeyPath)
+		if err != nil {
+			return nil, err
+		}
+		registry = tools.NewRegistry(client)
+		if cfg.ReviewerCookiePath != "" {
+			registry.AddReviewerTools(cfg.ReviewerCookiePath, cfg.EnableLegacyReviewerReply)
+		}
 	}
-	return &Dispatcher{
-		cfg:      cfg,
-		client:   client,
-		registry: tools.NewRegistry(client),
-		logger:   slog.Default(),
-	}, nil
+	if cfg.ReviewerCheckCommand != "" {
+		registry.AddReviewerMonitor(cfg.ReviewerCheckCommand)
+	}
+	return &Dispatcher{cfg: cfg, client: client, registry: registry, logger: slog.Default()}, nil
 }
 
 // SetLogger replaces the logger used for per-request structured logs.

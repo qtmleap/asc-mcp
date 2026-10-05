@@ -210,3 +210,18 @@ func BenchmarkLoad(b *testing.B) {
 		}
 	}
 }
+
+func TestReviewerOnlyConfiguration(t *testing.T) {
+	t.Setenv("ASC_ISSUER_ID", "")
+	t.Setenv("ASC_KEY_ID", "")
+	t.Setenv("ASC_PRIVATE_KEY_PATH", "")
+	t.Setenv("ASC_REVIEW_COOKIE_PATH", "/private/session/cookie")
+	cfg, err := Load()
+	if err != nil || cfg.ReviewerCookiePath == "" {
+		t.Fatalf("reviewer-only config failed: %v", err)
+	}
+	t.Setenv("ASC_KEY_ID", "partial-key")
+	if _, err := Load(); err == nil {
+		t.Fatal("partial JWT credentials accepted")
+	}
+}

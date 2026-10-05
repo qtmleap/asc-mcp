@@ -16,14 +16,26 @@ type Config struct {
 
 	// PrivateKeyPath is the path to the .p8 private key file.
 	PrivateKeyPath string
+
+	// ReviewerCookiePath is a fastlane CLI-created Apple ID cookie jar.
+	ReviewerCookiePath        string
+	ReviewerCheckCommand      string
+	EnableLegacyReviewerReply bool
 }
 
 // Load loads configuration from environment variables.
 func Load() (*Config, error) {
 	cfg := &Config{
-		IssuerID:       os.Getenv("ASC_ISSUER_ID"),
-		KeyID:          os.Getenv("ASC_KEY_ID"),
-		PrivateKeyPath: os.Getenv("ASC_PRIVATE_KEY_PATH"),
+		IssuerID:                  os.Getenv("ASC_ISSUER_ID"),
+		KeyID:                     os.Getenv("ASC_KEY_ID"),
+		PrivateKeyPath:            os.Getenv("ASC_PRIVATE_KEY_PATH"),
+		ReviewerCookiePath:        os.Getenv("ASC_REVIEW_COOKIE_PATH"),
+		ReviewerCheckCommand:      os.Getenv("ASC_REVIEW_CHECK_COMMAND"),
+		EnableLegacyReviewerReply: os.Getenv("ASC_REVIEW_ENABLE_LEGACY_REPLY") == "true",
+	}
+
+	if cfg.ReviewerCookiePath != "" && cfg.IssuerID == "" && cfg.KeyID == "" && cfg.PrivateKeyPath == "" {
+		return cfg, nil
 	}
 
 	if cfg.IssuerID == "" {
