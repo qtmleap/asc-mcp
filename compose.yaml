@@ -1,0 +1,36 @@
+services:
+  asc-mcp:
+    image: asc-mcp-local:0.2.0
+    build:
+      context: ${ASC_MCP_SOURCE_DIR:-.}
+      dockerfile: Dockerfile
+    user: '${ASC_MCP_UID:-65532}:${ASC_MCP_GID:-65532}'
+    command: ['serve-http', '--addr', '0.0.0.0:8080']
+    env_file:
+      - path: ${ASC_MCP_CONFIG_DIR:-${HOME}/.config/asc-mcp}/runtime.env
+        format: raw
+    environment:
+      HOME: /state
+      ASC_REVIEW_COOKIE_PATH: /run/asc-mcp/session.cookie
+    ports:
+      - '127.0.0.1:${ASC_MCP_PORT:-8878}:8080'
+    volumes:
+      - type: bind
+        source: ${ASC_MCP_CONFIG_DIR:-${HOME}/.config/asc-mcp}/credentials
+        target: /run/asc-mcp
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ASC_MCP_CONFIG_DIR:-${HOME}/.config/asc-mcp}/state
+        target: /state
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 10s

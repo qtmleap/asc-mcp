@@ -1,0 +1,5009 @@
+{
+  "add_review_submission_item": {
+    "app_custom_product_page_version_id": {
+      "type": "string"
+    },
+    "app_event_id": {
+      "type": "string"
+    },
+    "app_store_version_experiment_id": {
+      "type": "string"
+    },
+    "app_store_version_id": {
+      "type": "string"
+    },
+    "game_center_achievement_version_id": {
+      "type": "string"
+    },
+    "game_center_activity_version_id": {
+      "type": "string"
+    },
+    "game_center_challenge_version_id": {
+      "type": "string"
+    },
+    "game_center_leaderboard_set_version_id": {
+      "type": "string"
+    },
+    "game_center_leaderboard_version_id": {
+      "type": "string"
+    },
+    "in_app_purchase_version_id": {
+      "type": "string"
+    },
+    "review_submission_id": {
+      "type": "string"
+    },
+    "subscription_group_version_id": {
+      "type": "string"
+    },
+    "subscription_version_id": {
+      "type": "string"
+    }
+  },
+  "add_tester_to_group": {
+    "beta_group_id": {
+      "type": "string"
+    },
+    "beta_tester_id": {
+      "type": "string"
+    }
+  },
+  "assign_build_to_encryption_declaration": {
+    "build_id": {
+      "type": "string"
+    },
+    "declaration_id": {
+      "type": "string"
+    }
+  },
+  "clear_sandbox_tester_purchase_history": {
+    "tester_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "create_accessibility_declaration": {
+    "app_id": {
+      "type": "string"
+    },
+    "device_family": {
+      "type": "string"
+    },
+    "supports_audio_descriptions": {
+      "type": "boolean"
+    },
+    "supports_captions": {
+      "type": "boolean"
+    },
+    "supports_dark_interface": {
+      "type": "boolean"
+    },
+    "supports_differentiate_without_color_alone": {
+      "type": "boolean"
+    },
+    "supports_larger_text": {
+      "type": "boolean"
+    },
+    "supports_reduced_motion": {
+      "type": "boolean"
+    },
+    "supports_sufficient_contrast": {
+      "type": "boolean"
+    },
+    "supports_voice_control": {
+      "type": "boolean"
+    },
+    "supports_voiceover": {
+      "type": "boolean"
+    }
+  },
+  "create_alternative_distribution_key": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "create_analytics_report_request": {
+    "access_type": {
+      "type": "string"
+    },
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "create_android_to_ios_app_mapping": {
+    "app_id": {
+      "type": "string"
+    },
+    "package_name": {
+      "type": "string"
+    },
+    "sha256_fingerprints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "create_app_availability": {
+    "app_id": {
+      "type": "string"
+    },
+    "available_in_new_territories": {
+      "type": "boolean"
+    },
+    "territory_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "create_app_custom_product_page": {
+    "app_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "create_app_event": {
+    "app_id": {
+      "type": "string"
+    },
+    "badge": {
+      "type": "string"
+    },
+    "deep_link": {
+      "type": "string"
+    },
+    "primary_locale": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string"
+    },
+    "purchase_requirement": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    }
+  },
+  "create_app_info_localization": {
+    "app_info_id": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "privacy_choices_url": {
+      "type": "string"
+    },
+    "privacy_policy_text": {
+      "type": "string"
+    },
+    "privacy_policy_url": {
+      "type": "string"
+    },
+    "subtitle": {
+      "type": "string"
+    }
+  },
+  "create_app_store_review_attachment": {
+    "file_name": {
+      "type": "string"
+    },
+    "file_size": {
+      "type": "integer"
+    },
+    "review_detail_id": {
+      "type": "string"
+    }
+  },
+  "create_app_store_review_detail": {
+    "contact_email": {
+      "type": "string"
+    },
+    "contact_first_name": {
+      "type": "string"
+    },
+    "contact_last_name": {
+      "type": "string"
+    },
+    "contact_phone": {
+      "type": "string"
+    },
+    "demo_account_name": {
+      "type": "string"
+    },
+    "demo_account_password": {
+      "type": "string"
+    },
+    "demo_account_required": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_app_store_version": {
+    "app_id": {
+      "type": "string"
+    },
+    "copyright": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "release_type": {
+      "type": "string"
+    },
+    "version_string": {
+      "type": "string"
+    }
+  },
+  "create_app_store_version_experiment": {
+    "app_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "traffic_proportion": {
+      "type": "integer"
+    }
+  },
+  "create_background_asset": {
+    "app_id": {
+      "type": "string"
+    },
+    "asset_pack_identifier": {
+      "type": "string"
+    }
+  },
+  "create_background_asset_version": {
+    "background_asset_id": {
+      "type": "string"
+    }
+  },
+  "create_beta_app_localization": {
+    "app_id": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "feedback_email": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "marketing_url": {
+      "type": "string"
+    },
+    "privacy_policy_url": {
+      "type": "string"
+    }
+  },
+  "create_beta_app_review_submission": {
+    "build_id": {
+      "type": "string"
+    }
+  },
+  "create_beta_build_localization": {
+    "build_id": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "whats_new": {
+      "type": "string"
+    }
+  },
+  "create_beta_group": {
+    "app_id": {
+      "type": "string"
+    },
+    "feedback_enabled": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": "string"
+    },
+    "public_link_enabled": {
+      "type": "boolean"
+    }
+  },
+  "create_customer_review_response": {
+    "response_body": {
+      "type": "string"
+    },
+    "review_id": {
+      "type": "string"
+    }
+  },
+  "create_encryption_declaration": {
+    "app_description": {
+      "type": "string"
+    },
+    "app_id": {
+      "type": "string"
+    },
+    "available_on_french_store": {
+      "type": "boolean"
+    },
+    "code_value": {
+      "type": "string"
+    },
+    "contains_proprietary_cryptography": {
+      "type": "boolean"
+    },
+    "contains_third_party_cryptography": {
+      "type": "boolean"
+    },
+    "exempt": {
+      "type": "boolean"
+    },
+    "uses_encryption": {
+      "type": "boolean"
+    }
+  },
+  "create_end_user_license_agreement": {
+    "agreement_text": {
+      "type": "string"
+    },
+    "app_id": {
+      "type": "string"
+    },
+    "territory_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "create_game_center_achievement": {
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "points": {
+      "type": "integer"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "repeatable": {
+      "type": "boolean"
+    },
+    "show_before_earned": {
+      "type": "boolean"
+    },
+    "vendor_identifier": {
+      "type": "string"
+    }
+  },
+  "create_game_center_activity": {
+    "fallback_url": {
+      "type": "string"
+    },
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "game_center_group_id": {
+      "type": "string"
+    },
+    "maximum_players_count": {
+      "type": "integer"
+    },
+    "minimum_players_count": {
+      "type": "integer"
+    },
+    "play_style": {
+      "type": "string"
+    },
+    "properties": {
+      "type": "object"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "supports_party_code": {
+      "type": "boolean"
+    },
+    "vendor_identifier": {
+      "type": "string"
+    }
+  },
+  "create_game_center_activity_localization": {
+    "description": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_game_center_activity_version": {
+    "activity_id": {
+      "type": "string"
+    },
+    "fallback_url": {
+      "type": "string"
+    }
+  },
+  "create_game_center_challenge": {
+    "challenge_type": {
+      "type": "string"
+    },
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "game_center_group_id": {
+      "type": "string"
+    },
+    "leaderboard_id": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "repeatable": {
+      "type": "boolean"
+    },
+    "vendor_identifier": {
+      "type": "string"
+    }
+  },
+  "create_game_center_challenge_localization": {
+    "description": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_game_center_challenge_version": {
+    "challenge_id": {
+      "type": "string"
+    }
+  },
+  "create_game_center_leaderboard": {
+    "default_formatter": {
+      "type": "string"
+    },
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "score_range_end": {
+      "type": "string"
+    },
+    "score_range_start": {
+      "type": "string"
+    },
+    "score_sort_type": {
+      "type": "string"
+    },
+    "submission_type": {
+      "type": "string"
+    },
+    "vendor_identifier": {
+      "type": "string"
+    }
+  },
+  "create_game_center_leaderboard_set": {
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "game_center_group_id": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "vendor_identifier": {
+      "type": "string"
+    }
+  },
+  "create_game_center_leaderboard_set_localization": {
+    "locale": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_game_center_leaderboard_set_member_localization": {
+    "leaderboard_id": {
+      "type": "string"
+    },
+    "leaderboard_set_id": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "create_game_center_leaderboard_set_version": {
+    "leaderboard_set_id": {
+      "type": "string"
+    }
+  },
+  "create_in_app_purchase": {
+    "app_id": {
+      "type": "string"
+    },
+    "family_sharable": {
+      "type": "boolean"
+    },
+    "iap_type": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "product_id": {
+      "type": "string"
+    },
+    "review_note": {
+      "type": "string"
+    }
+  },
+  "create_in_app_purchase_localization": {
+    "description": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_in_app_purchase_offer_code": {
+    "customer_eligibilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "iap_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "prices": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "create_in_app_purchase_offer_code_custom_code": {
+    "custom_code": {
+      "type": "string"
+    },
+    "expiration_date": {
+      "type": "string"
+    },
+    "number_of_codes": {
+      "type": "integer"
+    },
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "create_in_app_purchase_offer_code_one_time_use_code": {
+    "environment": {
+      "type": "string"
+    },
+    "expiration_date": {
+      "type": "string"
+    },
+    "number_of_codes": {
+      "type": "integer"
+    },
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "create_in_app_purchase_version": {
+    "iap_id": {
+      "type": "string"
+    }
+  },
+  "create_marketplace_search_detail": {
+    "app_id": {
+      "type": "string"
+    },
+    "catalog_url": {
+      "type": "string"
+    }
+  },
+  "create_phased_release": {
+    "state": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_promoted_purchase": {
+    "app_id": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "in_app_purchase_id": {
+      "type": "string"
+    },
+    "visible_for_all_users": {
+      "type": "boolean"
+    }
+  },
+  "create_review_submission": {
+    "app_id": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    }
+  },
+  "create_routing_app_coverage": {
+    "file_name": {
+      "type": "string"
+    },
+    "file_size": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_subscription_group_localization": {
+    "custom_app_name": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_subscription_group_version": {
+    "group_id": {
+      "type": "string"
+    }
+  },
+  "create_subscription_localization": {
+    "description": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "create_subscription_offer_code": {
+    "customer_eligibilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "duration": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "number_of_periods": {
+      "type": "integer"
+    },
+    "offer_eligibility": {
+      "type": "string"
+    },
+    "offer_mode": {
+      "type": "string"
+    },
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "create_subscription_plan_availability": {
+    "available_in_new_territories": {
+      "type": "boolean"
+    },
+    "plan_type": {
+      "type": "string"
+    },
+    "subscription_id": {
+      "type": "string"
+    },
+    "territory_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "create_subscription_version": {
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "create_user_invitation": {
+    "all_apps_visible": {
+      "type": "boolean"
+    },
+    "email": {
+      "type": "string"
+    },
+    "first_name": {
+      "type": "string"
+    },
+    "last_name": {
+      "type": "string"
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "create_version_localization": {
+    "description": {
+      "type": "string"
+    },
+    "keywords": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "marketing_url": {
+      "type": "string"
+    },
+    "promotional_text": {
+      "type": "string"
+    },
+    "support_url": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    },
+    "whats_new": {
+      "type": "string"
+    }
+  },
+  "create_webhook": {
+    "app_id": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "event_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "secret": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    }
+  },
+  "create_win_back_offer": {
+    "duration": {
+      "type": "string"
+    },
+    "offer_id": {
+      "type": "string"
+    },
+    "offer_mode": {
+      "type": "string"
+    },
+    "period_count": {
+      "type": "integer"
+    },
+    "price_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "priority": {
+      "type": "string"
+    },
+    "promotion_intent": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "delete_accessibility_declaration": {
+    "declaration_id": {
+      "type": "string"
+    }
+  },
+  "delete_alternative_distribution_key": {
+    "key_id": {
+      "type": "string"
+    }
+  },
+  "delete_analytics_report_request": {
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "delete_android_to_ios_app_mapping": {
+    "mapping_id": {
+      "type": "string"
+    }
+  },
+  "delete_app_custom_product_page": {
+    "page_id": {
+      "type": "string"
+    }
+  },
+  "delete_app_event": {
+    "event_id": {
+      "type": "string"
+    }
+  },
+  "delete_app_info_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_app_store_review_attachment": {
+    "attachment_id": {
+      "type": "string"
+    }
+  },
+  "delete_app_store_version": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "delete_app_store_version_experiment": {
+    "experiment_id": {
+      "type": "string"
+    }
+  },
+  "delete_beta_app_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_beta_build_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_beta_feedback_crash": {
+    "submission_id": {
+      "type": "string"
+    }
+  },
+  "delete_beta_feedback_screenshot": {
+    "submission_id": {
+      "type": "string"
+    }
+  },
+  "delete_beta_group": {
+    "beta_group_id": {
+      "type": "string"
+    }
+  },
+  "delete_build_upload": {
+    "build_upload_id": {
+      "type": "string"
+    }
+  },
+  "delete_customer_review_response": {
+    "response_id": {
+      "type": "string"
+    }
+  },
+  "delete_end_user_license_agreement": {
+    "eula_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_achievement": {
+    "achievement_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_activity": {
+    "activity_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_activity_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_challenge": {
+    "challenge_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_challenge_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_leaderboard": {
+    "leaderboard_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_leaderboard_set": {
+    "leaderboard_set_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_leaderboard_set_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_game_center_leaderboard_set_member_localization": {
+    "member_localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_in_app_purchase": {
+    "iap_id": {
+      "type": "string"
+    }
+  },
+  "delete_in_app_purchase_image": {
+    "image_id": {
+      "type": "string"
+    }
+  },
+  "delete_in_app_purchase_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_marketplace_search_detail": {
+    "detail_id": {
+      "type": "string"
+    }
+  },
+  "delete_phased_release": {
+    "phased_release_id": {
+      "type": "string"
+    }
+  },
+  "delete_preview": {
+    "preview_id": {
+      "type": "string"
+    }
+  },
+  "delete_promoted_purchase": {
+    "promoted_purchase_id": {
+      "type": "string"
+    }
+  },
+  "delete_routing_app_coverage": {
+    "coverage_id": {
+      "type": "string"
+    }
+  },
+  "delete_screenshot": {
+    "screenshot_id": {
+      "type": "string"
+    }
+  },
+  "delete_subscription_group_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_subscription_image": {
+    "image_id": {
+      "type": "string"
+    }
+  },
+  "delete_subscription_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_user": {
+    "user_id": {
+      "type": "string"
+    }
+  },
+  "delete_user_invitation": {
+    "invitation_id": {
+      "type": "string"
+    }
+  },
+  "delete_version_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "delete_webhook": {
+    "webhook_id": {
+      "type": "string"
+    }
+  },
+  "delete_win_back_offer": {
+    "offer_id": {
+      "type": "string"
+    }
+  },
+  "end_app_availability_pre_order": {
+    "territory_availability_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "get_accessibility_declaration": {
+    "declaration_id": {
+      "type": "string"
+    }
+  },
+  "get_age_rating_declaration": {
+    "app_info_id": {
+      "type": "string"
+    }
+  },
+  "get_alternative_distribution_key": {
+    "key_id": {
+      "type": "string"
+    }
+  },
+  "get_alternative_distribution_package": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_analytics_report_request": {
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "get_android_to_ios_app_mapping": {
+    "mapping_id": {
+      "type": "string"
+    }
+  },
+  "get_app": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "get_app_availability": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "get_app_category": {
+    "category_id": {
+      "type": "string"
+    }
+  },
+  "get_app_clip": {
+    "app_clip_id": {
+      "type": "string"
+    }
+  },
+  "get_app_clip_advanced_experience": {
+    "experience_id": {
+      "type": "string"
+    }
+  },
+  "get_app_clip_default_experience": {
+    "experience_id": {
+      "type": "string"
+    }
+  },
+  "get_app_custom_product_page": {
+    "page_id": {
+      "type": "string"
+    }
+  },
+  "get_app_event": {
+    "event_id": {
+      "type": "string"
+    }
+  },
+  "get_app_info_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "get_app_infos": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "get_app_price_point": {
+    "price_point_id": {
+      "type": "string"
+    }
+  },
+  "get_app_price_schedule": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "get_app_store_review_attachment": {
+    "attachment_id": {
+      "type": "string"
+    }
+  },
+  "get_app_store_review_detail": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_app_store_version": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_app_store_version_experiment": {
+    "experiment_id": {
+      "type": "string"
+    }
+  },
+  "get_app_versions": {
+    "app_id": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "get_background_asset": {
+    "background_asset_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "get_background_asset_version": {
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_background_asset_version_release": {
+    "release_id": {
+      "type": "string"
+    },
+    "release_type": {
+      "type": "string"
+    }
+  },
+  "get_beta_app_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "get_beta_app_review_submission": {
+    "submission_id": {
+      "type": "string"
+    }
+  },
+  "get_beta_build_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "get_beta_build_usage_metrics": {
+    "build_id": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "get_beta_feedback_crash": {
+    "submission_id": {
+      "type": "string"
+    }
+  },
+  "get_beta_feedback_crash_log": {
+    "submission_id": {
+      "type": "string"
+    }
+  },
+  "get_beta_feedback_screenshot": {
+    "submission_id": {
+      "type": "string"
+    }
+  },
+  "get_beta_license_agreement": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "get_build": {
+    "build_id": {
+      "type": "string"
+    }
+  },
+  "get_build_beta_detail": {
+    "build_id": {
+      "type": "string"
+    }
+  },
+  "get_build_upload": {
+    "build_upload_id": {
+      "type": "string"
+    }
+  },
+  "get_bundle_id": {
+    "bundle_id_id": {
+      "type": "string"
+    }
+  },
+  "get_ci_build_run": {
+    "build_run_id": {
+      "type": "string"
+    }
+  },
+  "get_ci_product": {
+    "product_id": {
+      "type": "string"
+    }
+  },
+  "get_ci_workflow": {
+    "workflow_id": {
+      "type": "string"
+    }
+  },
+  "get_customer_review": {
+    "review_id": {
+      "type": "string"
+    }
+  },
+  "get_encryption_declaration": {
+    "declaration_id": {
+      "type": "string"
+    }
+  },
+  "get_end_user_license_agreement": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "get_finance_report": {
+    "region_code": {
+      "type": "string"
+    },
+    "report_date": {
+      "type": "string"
+    },
+    "report_type": {
+      "type": "string"
+    },
+    "vendor_number": {
+      "type": "string"
+    }
+  },
+  "get_game_center_achievement": {
+    "achievement_id": {
+      "type": "string"
+    }
+  },
+  "get_game_center_activity": {
+    "activity_id": {
+      "type": "string"
+    }
+  },
+  "get_game_center_activity_version": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_game_center_challenge": {
+    "challenge_id": {
+      "type": "string"
+    }
+  },
+  "get_game_center_challenge_version": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_game_center_detail": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "get_game_center_leaderboard": {
+    "leaderboard_id": {
+      "type": "string"
+    }
+  },
+  "get_game_center_leaderboard_set": {
+    "leaderboard_set_id": {
+      "type": "string"
+    }
+  },
+  "get_game_center_leaderboard_set_version": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_in_app_purchase": {
+    "iap_id": {
+      "type": "string"
+    }
+  },
+  "get_in_app_purchase_availability": {
+    "iap_id": {
+      "type": "string"
+    }
+  },
+  "get_in_app_purchase_offer_code": {
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "get_in_app_purchase_offer_code_one_time_use_code_values": {
+    "one_time_use_code_id": {
+      "type": "string"
+    }
+  },
+  "get_in_app_purchase_price_schedule": {
+    "iap_id": {
+      "type": "string"
+    }
+  },
+  "get_in_app_purchase_version": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_marketplace_search_detail": {
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "get_phased_release": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_preview": {
+    "preview_id": {
+      "type": "string"
+    }
+  },
+  "get_promoted_purchase": {
+    "promoted_purchase_id": {
+      "type": "string"
+    }
+  },
+  "get_review_submission": {
+    "review_submission_id": {
+      "type": "string"
+    }
+  },
+  "get_routing_app_coverage": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_sales_report": {
+    "frequency": {
+      "type": "string"
+    },
+    "report_date": {
+      "type": "string"
+    },
+    "report_sub_type": {
+      "type": "string"
+    },
+    "report_type": {
+      "type": "string"
+    },
+    "vendor_number": {
+      "type": "string"
+    }
+  },
+  "get_screenshot": {
+    "screenshot_id": {
+      "type": "string"
+    }
+  },
+  "get_subscription": {
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "get_subscription_group": {
+    "group_id": {
+      "type": "string"
+    }
+  },
+  "get_subscription_group_version": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_subscription_offer_code": {
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "get_subscription_plan_availability": {
+    "availability_id": {
+      "type": "string"
+    }
+  },
+  "get_subscription_price_point": {
+    "price_point_id": {
+      "type": "string"
+    }
+  },
+  "get_subscription_version": {
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "get_user": {
+    "user_id": {
+      "type": "string"
+    }
+  },
+  "get_user_invitation": {
+    "invitation_id": {
+      "type": "string"
+    }
+  },
+  "get_version_localization": {
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "get_webhook": {
+    "webhook_id": {
+      "type": "string"
+    }
+  },
+  "get_win_back_offer": {
+    "offer_id": {
+      "type": "string"
+    }
+  },
+  "invite_beta_tester": {
+    "beta_group_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "email": {
+      "type": "string"
+    },
+    "first_name": {
+      "type": "string"
+    },
+    "last_name": {
+      "type": "string"
+    }
+  },
+  "list_accessibility_declarations": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_alternative_distribution_keys": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_analytics_report_instances": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "report_id": {
+      "type": "string"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_analytics_report_requests": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_analytics_report_segments": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "instance_id": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_analytics_reports": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_android_to_ios_app_mappings": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_app_categories": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_app_clip_advanced_experiences": {
+    "app_clip_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_app_clip_default_experiences": {
+    "app_clip_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_app_clips": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_app_custom_product_pages": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_app_events": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_app_info_localizations": {
+    "app_info_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_app_price_point_equalizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "price_point_id": {
+      "type": "string"
+    }
+  },
+  "list_app_price_points": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_app_store_review_attachments": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_app_store_version_experiments": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_app_store_versions": {
+    "app_id": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_app_tag_territories": {
+    "app_tag_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_app_tags": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_apps": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_background_asset_upload_files": {
+    "cursor": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_background_asset_versions": {
+    "background_asset_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_background_assets": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_beta_app_localizations": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_beta_app_review_submissions": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_beta_build_localizations": {
+    "build_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_beta_feedback_crashes": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_beta_feedback_screenshots": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_beta_groups": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_beta_testers": {
+    "beta_group_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_build_upload_files": {
+    "build_upload_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_build_uploads": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_builds": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_bundle_ids": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_certificates": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_ci_build_runs": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "workflow_id": {
+      "type": "string"
+    }
+  },
+  "list_ci_products": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_ci_workflows": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "product_id": {
+      "type": "string"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_customer_review_summarizations": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_customer_reviews": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_devices": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_diagnostic_logs": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "signature_id": {
+      "type": "string"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_diagnostic_signatures": {
+    "build_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_encryption_declarations": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_game_center_achievements": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_game_center_activities": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_game_center_activity_localizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_game_center_activity_versions": {
+    "activity_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_game_center_challenge_localizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_game_center_challenge_versions": {
+    "challenge_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_game_center_challenges": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_game_center_leaderboard_set_localizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_game_center_leaderboard_set_member_localizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "leaderboard_id": {
+      "type": "string"
+    },
+    "leaderboard_set_id": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_game_center_leaderboard_set_members": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "leaderboard_set_id": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_game_center_leaderboard_set_versions": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "leaderboard_set_id": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_game_center_leaderboard_sets": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_game_center_leaderboards": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "game_center_detail_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_in_app_purchase_available_territories": {
+    "availability_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_in_app_purchase_offer_code_custom_codes": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "list_in_app_purchase_offer_code_one_time_use_codes": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "list_in_app_purchase_offer_code_prices": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "list_in_app_purchase_offer_codes": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "iap_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_in_app_purchase_price_points": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "iap_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_in_app_purchase_price_schedule_prices": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "price_schedule_id": {
+      "type": "string"
+    },
+    "price_type": {
+      "type": "string"
+    }
+  },
+  "list_in_app_purchase_version_images": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_in_app_purchase_version_localizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_in_app_purchase_versions": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "iap_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_in_app_purchases": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_perf_power_metrics": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_preview_sets": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_previews": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "preview_set_id": {
+      "type": "string"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_profiles": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_promoted_purchases": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_review_submissions": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_sandbox_testers": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_screenshot_sets": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_screenshots": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "screenshot_set_id": {
+      "type": "string"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_subscription_group_version_localizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_subscription_group_versions": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "group_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_subscription_groups": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_subscription_offer_codes": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "list_subscription_plan_availabilities": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "list_subscription_plan_available_territories": {
+    "availability_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_subscription_price_point_adjusted_equalizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "plan_type": {
+      "type": "string"
+    },
+    "price_point_id": {
+      "type": "string"
+    },
+    "upfront_price_point_id": {
+      "type": "string"
+    }
+  },
+  "list_subscription_price_point_equalizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "price_point_id": {
+      "type": "string"
+    }
+  },
+  "list_subscription_price_points": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "list_subscription_version_images": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_subscription_version_localizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_subscription_versions": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "list_subscriptions": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "group_id": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_territories": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_territory_age_ratings": {
+    "app_info_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_territory_availabilities": {
+    "availability_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_user_invitations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_users": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "list_version_localizations": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "list_webhook_deliveries": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "webhook_id": {
+      "type": "string"
+    }
+  },
+  "list_webhooks": {
+    "app_id": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  },
+  "list_win_back_offers": {
+    "cursor": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object"
+    },
+    "filter": {
+      "type": "object"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "sort": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "subscription_id": {
+      "type": "string"
+    }
+  },
+  "ping_webhook": {
+    "webhook_id": {
+      "type": "string"
+    }
+  },
+  "redeliver_webhook_delivery": {
+    "delivery_id": {
+      "type": "string"
+    }
+  },
+  "register_device": {
+    "name": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "udid": {
+      "type": "string"
+    }
+  },
+  "remove_beta_tester": {
+    "beta_tester_id": {
+      "type": "string"
+    }
+  },
+  "set_app_price_schedule": {
+    "app_id": {
+      "type": "string"
+    },
+    "base_territory_id": {
+      "type": "string"
+    },
+    "prices": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "set_in_app_purchase_availability": {
+    "available_in_new_territories": {
+      "type": "boolean"
+    },
+    "iap_id": {
+      "type": "string"
+    },
+    "territory_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "set_in_app_purchase_price_schedule": {
+    "base_territory_id": {
+      "type": "string"
+    },
+    "iap_id": {
+      "type": "string"
+    },
+    "prices": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "start_build_upload": {
+    "app_id": {
+      "type": "string"
+    },
+    "cf_bundle_short_version_string": {
+      "type": "string"
+    },
+    "cf_bundle_version": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    }
+  },
+  "start_ci_build_run": {
+    "workflow_id": {
+      "type": "string"
+    }
+  },
+  "submit_app_for_review": {
+    "app_id": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "submit_game_center_leaderboard_entry": {
+    "bundle_id": {
+      "type": "string"
+    },
+    "challenge_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context": {
+      "type": "string"
+    },
+    "pre_released": {
+      "type": "boolean"
+    },
+    "scoped_player_id": {
+      "type": "string"
+    },
+    "score": {
+      "type": "string"
+    },
+    "submitted_date": {
+      "type": "string"
+    },
+    "vendor_identifier": {
+      "type": "string"
+    }
+  },
+  "submit_game_center_player_achievement": {
+    "bundle_id": {
+      "type": "string"
+    },
+    "challenge_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "percentage_achieved": {
+      "type": "integer"
+    },
+    "pre_released": {
+      "type": "boolean"
+    },
+    "scoped_player_id": {
+      "type": "string"
+    },
+    "submitted_date": {
+      "type": "string"
+    },
+    "vendor_identifier": {
+      "type": "string"
+    }
+  },
+  "update_accessibility_declaration": {
+    "declaration_id": {
+      "type": "string"
+    },
+    "publish": {
+      "type": "boolean"
+    },
+    "supports_audio_descriptions": {
+      "type": "boolean"
+    },
+    "supports_captions": {
+      "type": "boolean"
+    },
+    "supports_dark_interface": {
+      "type": "boolean"
+    },
+    "supports_differentiate_without_color_alone": {
+      "type": "boolean"
+    },
+    "supports_larger_text": {
+      "type": "boolean"
+    },
+    "supports_reduced_motion": {
+      "type": "boolean"
+    },
+    "supports_sufficient_contrast": {
+      "type": "boolean"
+    },
+    "supports_voice_control": {
+      "type": "boolean"
+    },
+    "supports_voiceover": {
+      "type": "boolean"
+    }
+  },
+  "update_age_rating_declaration": {
+    "alcohol_tobacco_or_drug_use_or_references": {
+      "type": "string"
+    },
+    "contests": {
+      "type": "string"
+    },
+    "declaration_id": {
+      "type": "string"
+    },
+    "gambling": {
+      "type": "boolean"
+    },
+    "gambling_simulated": {
+      "type": "string"
+    },
+    "horror_or_fear_themes": {
+      "type": "string"
+    },
+    "mature_or_suggestive_themes": {
+      "type": "string"
+    },
+    "medical_or_treatment_information": {
+      "type": "string"
+    },
+    "profanity_or_crude_humor": {
+      "type": "string"
+    },
+    "seventeen_plus": {
+      "type": "boolean"
+    },
+    "sexual_content_graphic_and_nudity": {
+      "type": "string"
+    },
+    "sexual_content_or_nudity": {
+      "type": "string"
+    },
+    "unrestricted_web_access": {
+      "type": "boolean"
+    },
+    "violence_cartoon_or_fantasy": {
+      "type": "string"
+    },
+    "violence_realistic": {
+      "type": "string"
+    },
+    "violence_realistic_prolonged_graphic_or_sadistic": {
+      "type": "string"
+    }
+  },
+  "update_android_to_ios_app_mapping": {
+    "mapping_id": {
+      "type": "string"
+    },
+    "package_name": {
+      "type": "string"
+    },
+    "sha256_fingerprints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "update_app_custom_product_page": {
+    "name": {
+      "type": "string"
+    },
+    "page_id": {
+      "type": "string"
+    },
+    "visible": {
+      "type": "boolean"
+    }
+  },
+  "update_app_event": {
+    "badge": {
+      "type": "string"
+    },
+    "deep_link": {
+      "type": "string"
+    },
+    "event_id": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string"
+    },
+    "purchase_requirement": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    }
+  },
+  "update_app_info_localization": {
+    "localization_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "privacy_choices_url": {
+      "type": "string"
+    },
+    "privacy_policy_text": {
+      "type": "string"
+    },
+    "privacy_policy_url": {
+      "type": "string"
+    },
+    "subtitle": {
+      "type": "string"
+    }
+  },
+  "update_app_store_review_detail": {
+    "contact_email": {
+      "type": "string"
+    },
+    "contact_first_name": {
+      "type": "string"
+    },
+    "contact_last_name": {
+      "type": "string"
+    },
+    "contact_phone": {
+      "type": "string"
+    },
+    "demo_account_name": {
+      "type": "string"
+    },
+    "demo_account_password": {
+      "type": "string"
+    },
+    "demo_account_required": {
+      "type": "boolean"
+    },
+    "detail_id": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "update_app_store_version": {
+    "copyright": {
+      "type": "string"
+    },
+    "release_type": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    },
+    "version_string": {
+      "type": "string"
+    }
+  },
+  "update_app_store_version_experiment": {
+    "experiment_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "started": {
+      "type": "boolean"
+    },
+    "traffic_proportion": {
+      "type": "integer"
+    }
+  },
+  "update_app_tag": {
+    "app_tag_id": {
+      "type": "string"
+    },
+    "visible_in_app_store": {
+      "type": "boolean"
+    }
+  },
+  "update_background_asset": {
+    "archived": {
+      "type": "boolean"
+    },
+    "background_asset_id": {
+      "type": "string"
+    }
+  },
+  "update_beta_app_localization": {
+    "description": {
+      "type": "string"
+    },
+    "feedback_email": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "marketing_url": {
+      "type": "string"
+    },
+    "privacy_policy_url": {
+      "type": "string"
+    }
+  },
+  "update_beta_build_localization": {
+    "localization_id": {
+      "type": "string"
+    },
+    "whats_new": {
+      "type": "string"
+    }
+  },
+  "update_beta_license_agreement": {
+    "agreement_id": {
+      "type": "string"
+    },
+    "agreement_text": {
+      "type": "string"
+    }
+  },
+  "update_build_beta_detail": {
+    "auto_notify_enabled": {
+      "type": "boolean"
+    },
+    "detail_id": {
+      "type": "string"
+    }
+  },
+  "update_end_user_license_agreement": {
+    "agreement_text": {
+      "type": "string"
+    },
+    "eula_id": {
+      "type": "string"
+    }
+  },
+  "update_game_center_achievement": {
+    "achievement_id": {
+      "type": "string"
+    },
+    "archived": {
+      "type": "boolean"
+    },
+    "points": {
+      "type": "integer"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "repeatable": {
+      "type": "boolean"
+    },
+    "show_before_earned": {
+      "type": "boolean"
+    }
+  },
+  "update_game_center_activity": {
+    "activity_id": {
+      "type": "string"
+    },
+    "archived": {
+      "type": "boolean"
+    },
+    "maximum_players_count": {
+      "type": "integer"
+    },
+    "minimum_players_count": {
+      "type": "integer"
+    },
+    "play_style": {
+      "type": "string"
+    },
+    "properties": {
+      "type": "object"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "supports_party_code": {
+      "type": "boolean"
+    }
+  },
+  "update_game_center_activity_localization": {
+    "description": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "update_game_center_activity_version": {
+    "fallback_url": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "update_game_center_challenge": {
+    "archived": {
+      "type": "boolean"
+    },
+    "challenge_id": {
+      "type": "string"
+    },
+    "leaderboard_id": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "repeatable": {
+      "type": "boolean"
+    }
+  },
+  "update_game_center_challenge_localization": {
+    "description": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "update_game_center_leaderboard": {
+    "archived": {
+      "type": "boolean"
+    },
+    "leaderboard_id": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    },
+    "score_sort_type": {
+      "type": "string"
+    },
+    "submission_type": {
+      "type": "string"
+    }
+  },
+  "update_game_center_leaderboard_set": {
+    "leaderboard_set_id": {
+      "type": "string"
+    },
+    "reference_name": {
+      "type": "string"
+    }
+  },
+  "update_game_center_leaderboard_set_localization": {
+    "localization_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "update_game_center_leaderboard_set_member_localization": {
+    "member_localization_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "update_in_app_purchase": {
+    "family_sharable": {
+      "type": "boolean"
+    },
+    "iap_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "review_note": {
+      "type": "string"
+    }
+  },
+  "update_in_app_purchase_localization": {
+    "description": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "update_in_app_purchase_offer_code": {
+    "active": {
+      "type": "boolean"
+    },
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "update_in_app_purchase_offer_code_custom_code": {
+    "active": {
+      "type": "boolean"
+    },
+    "custom_code_id": {
+      "type": "string"
+    }
+  },
+  "update_in_app_purchase_offer_code_one_time_use_code": {
+    "active": {
+      "type": "boolean"
+    },
+    "one_time_use_code_id": {
+      "type": "string"
+    }
+  },
+  "update_marketplace_search_detail": {
+    "catalog_url": {
+      "type": "string"
+    },
+    "detail_id": {
+      "type": "string"
+    }
+  },
+  "update_phased_release": {
+    "phased_release_id": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    }
+  },
+  "update_promoted_purchase": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "promoted_purchase_id": {
+      "type": "string"
+    },
+    "visible_for_all_users": {
+      "type": "boolean"
+    }
+  },
+  "update_sandbox_tester": {
+    "interruptable": {
+      "type": "boolean"
+    },
+    "subscription_renewal_rate": {
+      "type": "string"
+    },
+    "territory": {
+      "type": "string"
+    },
+    "tester_id": {
+      "type": "string"
+    }
+  },
+  "update_subscription_group_localization": {
+    "custom_app_name": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "update_subscription_localization": {
+    "description": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "update_subscription_offer_code": {
+    "active": {
+      "type": "boolean"
+    },
+    "offer_code_id": {
+      "type": "string"
+    }
+  },
+  "update_subscription_plan_availability": {
+    "availability_id": {
+      "type": "string"
+    },
+    "available_in_new_territories": {
+      "type": "boolean"
+    },
+    "territory_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "update_user": {
+    "all_apps_visible": {
+      "type": "boolean"
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "user_id": {
+      "type": "string"
+    }
+  },
+  "update_version_localization": {
+    "description": {
+      "type": "string"
+    },
+    "keywords": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "marketing_url": {
+      "type": "string"
+    },
+    "promotional_text": {
+      "type": "string"
+    },
+    "support_url": {
+      "type": "string"
+    },
+    "whats_new": {
+      "type": "string"
+    }
+  },
+  "update_webhook": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "event_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "secret": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "webhook_id": {
+      "type": "string"
+    }
+  },
+  "update_win_back_offer": {
+    "offer_id": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string"
+    },
+    "promotion_intent": {
+      "type": "string"
+    }
+  },
+  "upload_app_preview": {
+    "file_data_base64": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "mime_type": {
+      "type": "string"
+    },
+    "preview_set_id": {
+      "type": "string"
+    }
+  },
+  "upload_app_screenshot": {
+    "file_data_base64": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "screenshot_set_id": {
+      "type": "string"
+    }
+  },
+  "upload_background_asset_file": {
+    "asset_type": {
+      "type": "string"
+    },
+    "file_data_base64": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "upload_build_file": {
+    "asset_type": {
+      "type": "string"
+    },
+    "build_upload_id": {
+      "type": "string"
+    },
+    "file_data_base64": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "uti": {
+      "type": "string"
+    }
+  },
+  "upload_game_center_activity_image": {
+    "file_data_base64": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "upload_game_center_challenge_image": {
+    "file_data_base64": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    }
+  },
+  "upload_game_center_leaderboard_set_image": {
+    "file_data_base64": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "localization_id": {
+      "type": "string"
+    }
+  },
+  "upload_review_attachment": {
+    "file_data_base64": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "review_detail_id": {
+      "type": "string"
+    }
+  }
+}

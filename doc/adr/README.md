@@ -1,3 +1,5 @@
+> Historical upstream Go decisions. Current Rust design and operation are documented in the root README and docs/rust-*.md.
+
 # Architecture Decision Records
 
 This directory contains Architecture Decision Records (ADRs) for the asc-mcp project.

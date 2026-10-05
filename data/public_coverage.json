@@ -1,0 +1,2870 @@
+[
+  {
+    "name": "list_apps",
+    "source": "internal/asc/tools/apps.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app",
+    "source": "internal/asc/tools/apps.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_versions",
+    "source": "internal/asc/tools/apps.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_builds",
+    "source": "internal/asc/tools/builds.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 25,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_build",
+    "source": "internal/asc/tools/builds.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_beta_groups",
+    "source": "internal/asc/tools/testflight.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 25,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_beta_group",
+    "source": "internal/asc/tools/testflight.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 12,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_beta_group",
+    "source": "internal/asc/tools/testflight.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_beta_testers",
+    "source": "internal/asc/tools/testflight.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 25,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "invite_beta_tester",
+    "source": "internal/asc/tools/testflight.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 12,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "remove_beta_tester",
+    "source": "internal/asc/tools/testflight.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "add_tester_to_group",
+    "source": "internal/asc/tools/testflight.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_bundle_ids",
+    "source": "internal/asc/tools/provisioning.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_bundle_id",
+    "source": "internal/asc/tools/provisioning.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_certificates",
+    "source": "internal/asc/tools/provisioning.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_profiles",
+    "source": "internal/asc/tools/provisioning.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_devices",
+    "source": "internal/asc/tools/provisioning.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "register_device",
+    "source": "internal/asc/tools/provisioning.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_info_localizations",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 18,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_info_localization",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_app_info_localization",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_app_info_localization",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 18,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_app_info_localization",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_infos",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_version_localizations",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 18,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_version_localization",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_version_localization",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_version_localization",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 21,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_version_localization",
+    "source": "internal/asc/tools/localizations.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_customer_reviews",
+    "source": "internal/asc/tools/reviews.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_customer_review",
+    "source": "internal/asc/tools/reviews.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_customer_review_response",
+    "source": "internal/asc/tools/reviews.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_customer_review_response",
+    "source": "internal/asc/tools/reviews.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_customer_review_summarizations",
+    "source": "internal/asc/tools/reviews.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchases",
+    "source": "internal/asc/tools/iap.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_in_app_purchase",
+    "source": "internal/asc/tools/iap.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_in_app_purchase",
+    "source": "internal/asc/tools/iap.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 13,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_in_app_purchase",
+    "source": "internal/asc/tools/iap.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 13,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_in_app_purchase",
+    "source": "internal/asc/tools/iap.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_groups",
+    "source": "internal/asc/tools/subscriptions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_subscription_group",
+    "source": "internal/asc/tools/subscriptions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscriptions",
+    "source": "internal/asc/tools/subscriptions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_subscription",
+    "source": "internal/asc/tools/subscriptions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_in_app_purchase_version",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_in_app_purchase_version",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_versions",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_version_localizations",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_in_app_purchase_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_in_app_purchase_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_in_app_purchase_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_version_images",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_in_app_purchase_image",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 5,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_in_app_purchase_image",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_in_app_purchase_image",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_subscription_version",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_subscription_version",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_versions",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_version_localizations",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_subscription_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_subscription_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_subscription_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_version_images",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_subscription_image",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 5,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_subscription_image",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_subscription_image",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_subscription_group_version",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_subscription_group_version",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_group_versions",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_group_version_localizations",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_subscription_group_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_subscription_group_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_subscription_group_localization",
+    "source": "internal/asc/tools/commerce_versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_offer_codes",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_in_app_purchase_offer_code",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_in_app_purchase_offer_code",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 11,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_in_app_purchase_offer_code",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_offer_code_prices",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_offer_code_custom_codes",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_in_app_purchase_offer_code_custom_code",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_in_app_purchase_offer_code_custom_code",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_offer_code_one_time_use_codes",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_in_app_purchase_offer_code_one_time_use_code",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_in_app_purchase_offer_code_one_time_use_code",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_in_app_purchase_offer_code_one_time_use_code_values",
+    "source": "internal/asc/tools/iap_offer_codes.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_price_points",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_in_app_purchase_price_schedule",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "set_in_app_purchase_price_schedule",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 11,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_price_schedule_prices",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 24,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_in_app_purchase_availability",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "set_in_app_purchase_availability",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_in_app_purchase_available_territories",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_plan_availabilities",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_subscription_plan_availability",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_subscription_plan_availability",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_subscription_plan_availability",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_plan_available_territories",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_subscription_price_point",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_price_point_equalizations",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_price_point_adjusted_equalizations",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 26,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "set_app_price_schedule",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 13,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_price_point",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_price_point_equalizations",
+    "source": "internal/asc/tools/commerce_pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_store_versions",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": [
+      "cursor",
+      "fields",
+      "filter",
+      "include",
+      "sort"
+    ]
+  },
+  {
+    "name": "get_app_store_version",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_app_store_version",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 11,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_app_store_version",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 12,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_app_store_version",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "submit_app_for_review",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "review workflow",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_store_review_detail",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_app_store_review_detail",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 28,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_app_store_review_detail",
+    "source": "internal/asc/tools/versions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 28,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_review_submissions",
+    "source": "internal/asc/tools/review_submissions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_review_submission",
+    "source": "internal/asc/tools/review_submissions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_review_submission",
+    "source": "internal/asc/tools/review_submissions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "add_review_submission_item",
+    "source": "internal/asc/tools/review_submissions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 36,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "submit_review_submission",
+    "source": "internal/asc/tools/review_submissions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "cancel_review_submission",
+    "source": "internal/asc/tools/review_submissions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_phased_release",
+    "source": "internal/asc/tools/phased_release.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_phased_release",
+    "source": "internal/asc/tools/phased_release.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_phased_release",
+    "source": "internal/asc/tools/phased_release.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_phased_release",
+    "source": "internal/asc/tools/phased_release.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_screenshot_sets",
+    "source": "internal/asc/tools/screenshots.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_screenshots",
+    "source": "internal/asc/tools/screenshots.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_screenshot",
+    "source": "internal/asc/tools/screenshots.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_screenshot",
+    "source": "internal/asc/tools/screenshots.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_preview_sets",
+    "source": "internal/asc/tools/screenshots.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_previews",
+    "source": "internal/asc/tools/screenshots.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_preview",
+    "source": "internal/asc/tools/screenshots.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_preview",
+    "source": "internal/asc/tools/screenshots.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "end_app_availability_pre_order",
+    "source": "internal/asc/tools/preorders.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_events",
+    "source": "internal/asc/tools/events.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_event",
+    "source": "internal/asc/tools/events.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_app_event",
+    "source": "internal/asc/tools/events.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_app_event",
+    "source": "internal/asc/tools/events.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 21,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_app_event",
+    "source": "internal/asc/tools/events.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_analytics_report_requests",
+    "source": "internal/asc/tools/analytics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_analytics_report_request",
+    "source": "internal/asc/tools/analytics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_analytics_report_request",
+    "source": "internal/asc/tools/analytics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_analytics_report_request",
+    "source": "internal/asc/tools/analytics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_analytics_reports",
+    "source": "internal/asc/tools/analytics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_analytics_report_instances",
+    "source": "internal/asc/tools/analytics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_analytics_report_segments",
+    "source": "internal/asc/tools/analytics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_clips",
+    "source": "internal/asc/tools/appclips.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_clip",
+    "source": "internal/asc/tools/appclips.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_clip_default_experiences",
+    "source": "internal/asc/tools/appclips.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_clip_default_experience",
+    "source": "internal/asc/tools/appclips.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_clip_advanced_experiences",
+    "source": "internal/asc/tools/appclips.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_clip_advanced_experience",
+    "source": "internal/asc/tools/appclips.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_detail",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_achievements",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_achievement",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_achievement",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 18,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_achievement",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_achievement",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_leaderboards",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_leaderboard",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_leaderboard",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 16,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_leaderboard",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 16,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_leaderboard",
+    "source": "internal/asc/tools/gamecenter.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_leaderboard_sets",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_leaderboard_set",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_leaderboard_set",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_leaderboard_set",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_leaderboard_set",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_leaderboard_set_members",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "add_game_center_leaderboard_set_members",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "remove_game_center_leaderboard_set_members",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_leaderboard_set_versions",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_leaderboard_set_version",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_leaderboard_set_version",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_leaderboard_set_localizations",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_leaderboard_set_localization",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 5,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_leaderboard_set_localization",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_leaderboard_set_localization",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "upload_game_center_leaderboard_set_image",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "upload workflow",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_leaderboard_set_member_localizations",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 15,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_leaderboard_set_member_localization",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_leaderboard_set_member_localization",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_leaderboard_set_member_localization",
+    "source": "internal/asc/tools/gamecenter_leaderboard_sets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_activities",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_activity",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_activity",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 29,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_activity",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 29,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_activity",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_activity_versions",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_activity_version",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_activity_version",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_activity_version",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_activity_localizations",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_activity_localization",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_activity_localization",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_activity_localization",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "upload_game_center_activity_image",
+    "source": "internal/asc/tools/gamecenter_activities.go",
+    "implementation": "upload workflow",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_challenges",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_challenge",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_challenge",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_challenge",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_challenge",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_challenge_versions",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_game_center_challenge_version",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_challenge_version",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_game_center_challenge_localizations",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_game_center_challenge_localization",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_game_center_challenge_localization",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_game_center_challenge_localization",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "upload_game_center_challenge_image",
+    "source": "internal/asc/tools/gamecenter_challenges.go",
+    "implementation": "upload workflow",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "submit_game_center_player_achievement",
+    "source": "internal/asc/tools/gamecenter_submissions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "submit_game_center_leaderboard_entry",
+    "source": "internal/asc/tools/gamecenter_submissions.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 19,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_ci_products",
+    "source": "internal/asc/tools/xcode_cloud.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 25,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_ci_product",
+    "source": "internal/asc/tools/xcode_cloud.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_ci_workflows",
+    "source": "internal/asc/tools/xcode_cloud.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_ci_workflow",
+    "source": "internal/asc/tools/xcode_cloud.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_ci_build_runs",
+    "source": "internal/asc/tools/xcode_cloud.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_ci_build_run",
+    "source": "internal/asc/tools/xcode_cloud.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "start_ci_build_run",
+    "source": "internal/asc/tools/xcode_cloud.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_sales_report",
+    "source": "internal/asc/tools/reports.go",
+    "implementation": "report",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_finance_report",
+    "source": "internal/asc/tools/reports.go",
+    "implementation": "report",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_encryption_declarations",
+    "source": "internal/asc/tools/encryption.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 25,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_encryption_declaration",
+    "source": "internal/asc/tools/encryption.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_encryption_declaration",
+    "source": "internal/asc/tools/encryption.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 29,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "assign_build_to_encryption_declaration",
+    "source": "internal/asc/tools/encryption.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_users",
+    "source": "internal/asc/tools/users.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_user",
+    "source": "internal/asc/tools/users.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_user",
+    "source": "internal/asc/tools/users.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 10,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_user",
+    "source": "internal/asc/tools/users.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_user_invitations",
+    "source": "internal/asc/tools/users.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_user_invitation",
+    "source": "internal/asc/tools/users.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_user_invitation",
+    "source": "internal/asc/tools/users.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 10,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_user_invitation",
+    "source": "internal/asc/tools/users.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_price_schedule",
+    "source": "internal/asc/tools/pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_price_points",
+    "source": "internal/asc/tools/pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_territories",
+    "source": "internal/asc/tools/pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_price_points",
+    "source": "internal/asc/tools/pricing.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_availability",
+    "source": "internal/asc/tools/availability.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_app_availability",
+    "source": "internal/asc/tools/availability.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 10,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_territory_availabilities",
+    "source": "internal/asc/tools/availability.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_age_rating_declaration",
+    "source": "internal/asc/tools/age_rating.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_age_rating_declaration",
+    "source": "internal/asc/tools/age_rating.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 51,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": [
+      "horror_or_fear_themes"
+    ]
+  },
+  {
+    "name": "list_territory_age_ratings",
+    "source": "internal/asc/tools/age_rating.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_beta_app_review_submissions",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_beta_app_review_submission",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_beta_app_review_submission",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_beta_license_agreement",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_beta_license_agreement",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_beta_app_localizations",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_beta_app_localization",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_beta_app_localization",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 16,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_beta_app_localization",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 15,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_beta_app_localization",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_beta_build_localizations",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_beta_build_localization",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_beta_build_localization",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_beta_build_localization",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_beta_build_localization",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_build_beta_detail",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_build_beta_detail",
+    "source": "internal/asc/tools/beta_review.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_sandbox_testers",
+    "source": "internal/asc/tools/sandbox.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_sandbox_tester",
+    "source": "internal/asc/tools/sandbox.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 13,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "clear_sandbox_tester_purchase_history",
+    "source": "internal/asc/tools/sandbox.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_promoted_purchases",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_promoted_purchase",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_promoted_purchase",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 15,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": [
+      "visibility_type"
+    ]
+  },
+  {
+    "name": "update_promoted_purchase",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 14,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": [
+      "visibility_type"
+    ]
+  },
+  {
+    "name": "delete_promoted_purchase",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_subscription_offer_codes",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_subscription_offer_code",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_subscription_offer_code",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 39,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": [
+      "customer_eligibility",
+      "duration_type",
+      "is_active",
+      "offer_eligibility_type",
+      "total_number_of_codes"
+    ]
+  },
+  {
+    "name": "update_subscription_offer_code",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 11,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": [
+      "is_active"
+    ]
+  },
+  {
+    "name": "list_win_back_offers",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_win_back_offer",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_win_back_offer",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 25,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_win_back_offer",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_win_back_offer",
+    "source": "internal/asc/tools/promoted_purchases.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_custom_product_pages",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_custom_product_page",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_app_custom_product_page",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_app_custom_product_page",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 10,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_app_custom_product_page",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_store_version_experiments",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 27,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_store_version_experiment",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_app_store_version_experiment",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 10,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_app_store_version_experiment",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 15,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_app_store_version_experiment",
+    "source": "internal/asc/tools/product_pages.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_perf_power_metrics",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_diagnostic_signatures",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_diagnostic_logs",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_store_review_attachments",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_store_review_attachment",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_app_store_review_attachment",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 5,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_app_store_review_attachment",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_routing_app_coverage",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_routing_app_coverage",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 5,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_routing_app_coverage",
+    "source": "internal/asc/tools/diagnostics.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_end_user_license_agreement",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_end_user_license_agreement",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_end_user_license_agreement",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_end_user_license_agreement",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_categories",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_app_category",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_alternative_distribution_keys",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 22,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_alternative_distribution_key",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_alternative_distribution_key",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_alternative_distribution_key",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_alternative_distribution_package",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_marketplace_search_detail",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_marketplace_search_detail",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_marketplace_search_detail",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_marketplace_search_detail",
+    "source": "internal/asc/tools/misc.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_webhooks",
+    "source": "internal/asc/tools/webhooks.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 14,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_webhook",
+    "source": "internal/asc/tools/webhooks.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_webhook",
+    "source": "internal/asc/tools/webhooks.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 11,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_webhook",
+    "source": "internal/asc/tools/webhooks.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 19,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_webhook",
+    "source": "internal/asc/tools/webhooks.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_webhook_deliveries",
+    "source": "internal/asc/tools/webhooks.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "ping_webhook",
+    "source": "internal/asc/tools/webhooks.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "redeliver_webhook_delivery",
+    "source": "internal/asc/tools/webhooks.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_accessibility_declarations",
+    "source": "internal/asc/tools/accessibility.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_accessibility_declaration",
+    "source": "internal/asc/tools/accessibility.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_accessibility_declaration",
+    "source": "internal/asc/tools/accessibility.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 40,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_accessibility_declaration",
+    "source": "internal/asc/tools/accessibility.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 43,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_accessibility_declaration",
+    "source": "internal/asc/tools/accessibility.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_tags",
+    "source": "internal/asc/tools/app_tags.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 23,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_app_tag",
+    "source": "internal/asc/tools/app_tags.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_app_tag_territories",
+    "source": "internal/asc/tools/app_tags.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 11,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_android_to_ios_app_mappings",
+    "source": "internal/asc/tools/android_mapping.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 14,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_android_to_ios_app_mapping",
+    "source": "internal/asc/tools/android_mapping.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_android_to_ios_app_mapping",
+    "source": "internal/asc/tools/android_mapping.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 5,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_android_to_ios_app_mapping",
+    "source": "internal/asc/tools/android_mapping.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_android_to_ios_app_mapping",
+    "source": "internal/asc/tools/android_mapping.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "upload_app_screenshot",
+    "source": "internal/asc/tools/uploads.go",
+    "implementation": "upload workflow",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "upload_app_preview",
+    "source": "internal/asc/tools/uploads.go",
+    "implementation": "upload workflow",
+    "go_initial_request_probes": 7,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "upload_review_attachment",
+    "source": "internal/asc/tools/uploads.go",
+    "implementation": "upload workflow",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "start_build_upload",
+    "source": "internal/asc/tools/build_uploads.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 10,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "upload_build_file",
+    "source": "internal/asc/tools/build_uploads.go",
+    "implementation": "upload workflow",
+    "go_initial_request_probes": 18,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_build_upload",
+    "source": "internal/asc/tools/build_uploads.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_build_uploads",
+    "source": "internal/asc/tools/build_uploads.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_build_upload_files",
+    "source": "internal/asc/tools/build_uploads.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 11,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_build_upload",
+    "source": "internal/asc/tools/build_uploads.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_beta_feedback_crashes",
+    "source": "internal/asc/tools/beta_feedback.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_beta_feedback_crash",
+    "source": "internal/asc/tools/beta_feedback.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_beta_feedback_crash_log",
+    "source": "internal/asc/tools/beta_feedback.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_beta_feedback_crash",
+    "source": "internal/asc/tools/beta_feedback.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_beta_feedback_screenshots",
+    "source": "internal/asc/tools/beta_feedback.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 17,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_beta_feedback_screenshot",
+    "source": "internal/asc/tools/beta_feedback.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "delete_beta_feedback_screenshot",
+    "source": "internal/asc/tools/beta_feedback.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_beta_build_usage_metrics",
+    "source": "internal/asc/tools/beta_feedback.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 8,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_background_assets",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_background_asset",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_background_asset",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "update_background_asset",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 4,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_background_asset_versions",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 20,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_background_asset_version",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "create_background_asset_version",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 3,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "upload_background_asset_file",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "upload workflow",
+    "go_initial_request_probes": 9,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "list_background_asset_upload_files",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 11,
+    "cursor_supported": true,
+    "legacy_ignored_arguments": []
+  },
+  {
+    "name": "get_background_asset_version_release",
+    "source": "internal/asc/tools/background_assets.go",
+    "implementation": "single request",
+    "go_initial_request_probes": 6,
+    "cursor_supported": false,
+    "legacy_ignored_arguments": []
+  }
+]
