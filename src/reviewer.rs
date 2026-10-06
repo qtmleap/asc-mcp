@@ -48,13 +48,35 @@ struct Cookie {
     expires: Option<String>,
 }
 
+fn root_for(home: &Path) -> Result<PathBuf> {
+    let base = home.join("Library/Application Support");
+    let generic = base.join("ASC MCP");
+    let legacy = base.join("InterceptorReview");
+    match fs::symlink_metadata(&generic) {
+        Ok(_) => Ok(generic),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => match fs::symlink_metadata(&legacy) {
+            Ok(_) => Ok(legacy),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(generic),
+            Err(_) => bail!("reviewer_private_root_unreadable"),
+        },
+        Err(_) => bail!("reviewer_private_root_unreadable"),
+    }
+}
+
+fn monitor_app_id(value: Option<String>) -> Result<String> {
+    let value = value.unwrap_or_default();
+    if !value.bytes().all(|b| b.is_ascii_digit()) {
+        bail!("invalid_app_id");
+    }
+    Ok(value)
+}
+
 pub(crate) fn private_root() -> Result<PathBuf> {
-    Ok(PathBuf::from(
+    root_for(&PathBuf::from(
         std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))
             .context("reviewer_home_required")?,
-    )
-    .join("Library/Application Support/InterceptorReview"))
+    ))
 }
 
 pub(crate) fn session_source() -> Result<PathBuf> {
@@ -429,10 +451,7 @@ impl Reviewer {
     pub fn new_default() -> Result<Self> {
         let root = state_root()?;
         let cookie_path = session_source()?;
-        let app_id = std::env::var("ASC_REVIEW_APP_ID").unwrap_or_else(|_| "6749347474".into());
-        if app_id.is_empty() || !app_id.bytes().all(|b| b.is_ascii_digit()) {
-            bail!("invalid_app_id");
-        }
+        let app_id = monitor_app_id(std::env::var("ASC_REVIEW_APP_ID").ok())?;
         Ok(Self {
             client: Client::builder()
                 .timeout(Duration::from_secs(30))
@@ -875,6 +894,9 @@ impl Reviewer {
             .map_err(|_| anyhow::anyhow!("reviewer_check_timeout"))?
     }
     async fn check_inner(&self) -> Result<Value> {
+        if self.app_id.is_empty() {
+            bail!("ASC_REVIEW_APP_ID_required");
+        }
         let _lock = MonitorLock::acquire(&self.root)?;
         let state = self.state()?;
         let submissions = self
@@ -970,6 +992,9 @@ impl Reviewer {
         )
     }
     pub fn acknowledge(&self, token: &str) -> Result<Value> {
+        if self.app_id.is_empty() {
+            bail!("ASC_REVIEW_APP_ID_required");
+        }
         if token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
             bail!("valid snapshot_token required");
         }
@@ -1333,5 +1358,68 @@ mod tests {
                 .contains("actor_schema_unknown")
         );
         assert!(!r.root.join("messages.json").exists());
+    }
+}
+
+#[cfg(test)]
+mod generic_storage_tests {
+    use super::*;
+    #[test]
+    fn fresh_install_uses_generic_root() {
+        let home = tempfile::tempdir().unwrap();
+        assert_eq!(
+            root_for(home.path()).unwrap(),
+            home.path().join("Library/Application Support/ASC MCP")
+        );
+    }
+    #[test]
+    fn legacy_install_preserves_whole_root() {
+        let home = tempfile::tempdir().unwrap();
+        let old = home
+            .path()
+            .join("Library/Application Support/InterceptorReview");
+        fs::create_dir_all(&old).unwrap();
+        fs::write(old.join("state.json"), b"existing-state").unwrap();
+        assert_eq!(root_for(home.path()).unwrap(), old);
+        assert_eq!(fs::read(old.join("state.json")).unwrap(), b"existing-state");
+        assert!(
+            !home
+                .path()
+                .join("Library/Application Support/ASC MCP")
+                .exists()
+        );
+    }
+    #[test]
+    fn generic_root_wins_when_both_exist() {
+        let home = tempfile::tempdir().unwrap();
+        let base = home.path().join("Library/Application Support");
+        fs::create_dir_all(base.join("ASC MCP")).unwrap();
+        fs::create_dir_all(base.join("InterceptorReview")).unwrap();
+        assert_eq!(root_for(home.path()).unwrap(), base.join("ASC MCP"));
+    }
+    #[test]
+    fn no_app_is_selected_implicitly() {
+        assert_eq!(monitor_app_id(None).unwrap(), "");
+        assert_eq!(monitor_app_id(Some(String::new())).unwrap(), "");
+        assert_eq!(monitor_app_id(Some("123".into())).unwrap(), "123");
+        assert!(monitor_app_id(Some("invalid".into())).is_err());
+    }
+    #[tokio::test]
+    async fn missing_monitor_app_fails_before_network_or_state_write() {
+        let home = tempfile::tempdir().unwrap();
+        let r = Reviewer {
+            client: Client::new(),
+            cookie_path: home.path().join("missing.cookie"),
+            root: home.path().join("absent"),
+            origin: Url::parse("http://127.0.0.1:1").unwrap(),
+            app_id: String::new(),
+            legacy_reply: false,
+            limits: status::Limits::default(),
+        };
+        assert_eq!(
+            r.check_updates().await.unwrap_err().to_string(),
+            "ASC_REVIEW_APP_ID_required"
+        );
+        assert!(!r.root.exists());
     }
 }

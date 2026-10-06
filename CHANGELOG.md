@@ -12,6 +12,7 @@ under `## [Unreleased]` until a release is cut.
 ## [Unreleased]
 
 ### Fixed
+- Use the generic `ASC MCP` private directory with whole-root legacy fallback; require an explicit reviewer monitor app ID instead of selecting Interceptor. Docker login preserves the service state-root selection.
 - Reuse verified reviewer sessions and preserve account-bound login cookies for
   interactive reauthentication, with isolated Docker storage and a `--fresh` recovery option.
 - Finalize uploaded assets with MD5 checksums accepted by App Store Connect,

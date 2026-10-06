@@ -121,6 +121,17 @@ The `.p8` does not replace reviewer-session authentication.
 
 ### Session setup and renewal
 
+The generic private directory is `Library/Application Support/ASC MCP` beneath
+HOME. If it is absent and the old `InterceptorReview` directory exists, the
+whole legacy directory remains in use; no credentials or state are copied or
+mixed automatically. To migrate, stop all service/login/check processes and move
+the whole directory to `ASC MCP` (never merge two directories). In Docker this
+is beneath `~/.config/asc-mcp/state`; native runs use HOME. The host credentials
+and login-trust bind directories keep their existing generic `asc-mcp` names.
+Set `ASC_REVIEW_APP_ID` explicitly for reply monitoring; no app is selected by
+default. Session/status and per-app tools remain available without a monitor ID.
+
+
 Use your primary Apple Account email (not a phone number or email alias). If the saved ASC session or overlay is malformed, or preflight is refused, `reviewer-login --fresh` skips preflight for recovery while still reusing valid login cookies. Malformed or insecure login-cookie storage remains an error: fix its permissions or remove the private `credentials-login/trust.json` before logging in again. The login-only store can contain full Apple session credentials as well as device-trust cookies.
 
 Run `reviewer-login` yourself in a terminal; supply the Apple ID, password and
@@ -142,18 +153,27 @@ status stops without prompting. Trusted-device cookies from a confirmed login ar
 private, login-only directory, bound to a hash of the Apple ID (never the identity, password
 or codes), and the reviewer service never mounts or reads it. The Docker helper uses
 `~/.config/asc-mcp/credentials-login` (mounted at `/login-trust`, override with
-`ASC_REVIEW_TRUST_ROOT`); a native run defaults to `<HOME>/Library/Application Support/InterceptorReview/login-trust`.
-`ASC_REVIEW_COOKIE_PATH` selects the session read by the service and login preflight. Native new logins save to `<HOME>/Library/Application Support/InterceptorReview/session.cookie`; update a custom native source with that confirmed file before resuming checks. The Docker command below maps both paths to the same host file, so no copying is needed.
+`ASC_REVIEW_TRUST_ROOT`); a native run defaults to `login-trust` beneath the effective private root (`<HOME>/Library/Application Support/ASC MCP` for new installations).
+`ASC_REVIEW_COOKIE_PATH` selects the session read by the service and login preflight. Native new logins save to `session.cookie` beneath the effective private root; update a custom native source with that confirmed file before resuming checks. The Docker command below maps both paths to the same host file, so no copying is needed.
 
 `ASC_REVIEW_STATE_ROOT` selects the overlay/lock directory shared with the service
 (default: the private root). To run the container yourself from this repository (run `./script/docker/setup.sh` once to create the private directories):
 
 ```sh
+asc_state_name='ASC MCP'
+asc_state_base="$HOME/.config/asc-mcp/state/Library/Application Support"
+if [ ! -e "$asc_state_base/ASC MCP" ] && [ ! -L "$asc_state_base/ASC MCP" ] &&
+   { [ -e "$asc_state_base/InterceptorReview" ] || [ -L "$asc_state_base/InterceptorReview" ]; }; then
+  asc_state_name='InterceptorReview'
+fi
+asc_state_root="/state/Library/Application Support/$asc_state_name"
+asc_configured_root=$(sed -n 's/^[[:space:]]*ASC_REVIEW_STATE_ROOT=//p' "$HOME/.config/asc-mcp/runtime.env" | tail -n 1)
+if [ -n "$asc_configured_root" ]; then asc_state_root=$asc_configured_root; fi
 docker compose --env-file ~/.config/asc-mcp/runtime.env -p asc-mcp -f compose.yaml run --rm --no-deps \
   --env HOME=/login-home \
-  --env 'ASC_REVIEW_STATE_ROOT=/state/Library/Application Support/InterceptorReview' \
+  --env "ASC_REVIEW_STATE_ROOT=$asc_state_root" \
   --env ASC_REVIEW_TRUST_ROOT=/login-trust \
-  --volume ~/.config/asc-mcp/credentials:'/login-home/Library/Application Support/InterceptorReview':rw \
+  --volume ~/.config/asc-mcp/credentials:'/login-home/Library/Application Support/ASC MCP':rw \
   --volume ~/.config/asc-mcp/credentials-login:/login-trust:rw \
   asc-mcp reviewer-login
 ```
@@ -250,7 +270,7 @@ Reply attachments are not implemented. Neither checks nor acknowledgements send
 messages or submit an app.
 
 On this project's Mac setup, private cookies, snapshots and state live under
-`~/Library/Application Support/InterceptorReview/`, outside Git. Files use mode
+`~/Library/Application Support/ASC MCP/`, outside Git. Files use mode
 600 and the directory mode 700. An OS lock excludes concurrent monitors and
 releases on process exit. Acknowledgements require a snapshot token so a newer,
 unread message cannot be marked seen accidentally. Details:

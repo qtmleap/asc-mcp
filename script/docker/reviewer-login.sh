@@ -23,11 +23,22 @@ config_dir=$(CDPATH= cd -- "$config_dir" && pwd)
 umask 077
 mkdir -p "$config_dir/credentials-login" "$config_dir/state"
 export ASC_MCP_CONFIG_DIR=$config_dir
-state_root='/state/Library/Application Support/InterceptorReview'
+state_name='ASC MCP'
+state_base="$config_dir/state/Library/Application Support"
+if [ ! -e "$state_base/ASC MCP" ] && [ ! -L "$state_base/ASC MCP" ] &&
+   { [ -e "$state_base/InterceptorReview" ] || [ -L "$state_base/InterceptorReview" ]; }; then
+  state_name='InterceptorReview'
+fi
+state_root="/state/Library/Application Support/$state_name"
+# Read only this raw Compose env key; never source or evaluate runtime.env.
+configured_state_root=$(sed -n 's/^[[:space:]]*ASC_REVIEW_STATE_ROOT=//p' "$config_dir/runtime.env" | tail -n 1)
+if [ -n "$configured_state_root" ]; then
+  state_root=$configured_state_root
+fi
 exec "$repo_dir/script/docker/compose.sh" "$mode" run --rm --no-deps \
   --env HOME=/login-home \
   --env "ASC_REVIEW_STATE_ROOT=$state_root" \
   --env ASC_REVIEW_TRUST_ROOT=/login-trust \
-  --volume "$config_dir/credentials:/login-home/Library/Application Support/InterceptorReview:rw" \
+  --volume "$config_dir/credentials:/login-home/Library/Application Support/ASC MCP:rw" \
   --volume "$config_dir/credentials-login:/login-trust:rw" \
   asc-mcp reviewer-login "$@"

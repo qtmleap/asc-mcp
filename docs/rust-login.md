@@ -22,7 +22,7 @@ must complete those actions on Apple's website before retrying.
 
 After authentication, the CLI confirms access through the App Store Connect
 Olympus session endpoint. It then writes only applicable cookies to
-`~/Library/Application Support/InterceptorReview/session.cookie`, using the
+`~/Library/Application Support/ASC MCP/session.cookie`, using the
 reviewer's canonical JSON format and atomic private-file writer. The directory
 has mode 700 and the file has mode 600 on Unix. An existing session is replaced
 only after the new session is confirmed. The password is never persisted.

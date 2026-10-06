@@ -28,7 +28,7 @@ object containing `cookies`. The canonical imported format is:
 unsafe cookie characters, unrelated domains, and non-root paths are excluded.
 Input files must be regular files with no group/other permissions; symlinks are
 rejected. Import stores JSON at
-`~/Library/Application Support/InterceptorReview/session.cookie`, mode 600,
+`~/Library/Application Support/ASC MCP/session.cookie`, mode 600,
 inside a mode 700 directory. Import converts a session; it does not verify that
 Apple will accept it. Cookies reload before every request.
 
@@ -51,8 +51,8 @@ or change the result of an uncertain POST.
 
 Reviewer tools activate when the private session exists or
 `ASC_REVIEW_COOKIE_PATH`, `ASC_REVIEW_APP_ID`, or `ASC_REVIEWER_ONLY` is set.
-`ASC_REVIEW_APP_ID` selects the monitored app; the previous monitor's default,
-`6749347474`, is retained. Monitor files remain `state.json` and `messages.json`
+`ASC_REVIEW_APP_ID` explicitly selects the monitored app; there is no default.
+Without it, monitoring returns `ASC_REVIEW_APP_ID_required` before any request. Monitor files remain `state.json` and `messages.json`
 in the same private directory.
 
 The conversation and monitor tools are `list_reviewer_threads`, `get_reviewer_messages`,

@@ -70,6 +70,7 @@ fn native_monitor_reports_missing_auth_without_prompting() {
     ] {
         cmd.env_remove(key);
     }
+    cmd.env("ASC_REVIEW_APP_ID", "123");
     let output = cmd.stdin(Stdio::null()).output().unwrap();
     assert_eq!(output.status.code(), Some(2));
     let value: Value = serde_json::from_slice(&output.stdout).unwrap();
