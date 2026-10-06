@@ -1033,6 +1033,7 @@ mod tests {
     }
     #[test]
     fn trust_round_trip_binding_and_permissions() {
+        #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("login-trust");
@@ -1043,14 +1044,17 @@ mod tests {
         let trust = auth.trust_cookies();
         assert_eq!(trust.len(), 2);
         let path = trust::save_to(&root, " User@Example.com ", &trust).unwrap();
-        assert_eq!(
-            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-        assert_eq!(
-            fs::metadata(&root).unwrap().permissions().mode() & 0o777,
-            0o700
-        );
+        #[cfg(unix)]
+        {
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            assert_eq!(
+                fs::metadata(&root).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+        }
         let raw = fs::read_to_string(&path).unwrap();
         assert!(!raw.contains("example.com"));
         assert_eq!(trust::load_from(&root, "user@example.com").unwrap(), trust);
@@ -1065,17 +1069,21 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-        // Insecure file or directory, and symlinks, fail closed.
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
-        assert!(trust::load_from(&root, "user@example.com").is_err());
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(trust::load_from(&root, "user@example.com").is_err());
-        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-        let link = dir.path().join("link");
-        std::os::unix::fs::symlink(&root, &link).unwrap();
-        assert!(trust::load_from(&link, "user@example.com").is_err());
+        #[cfg(unix)]
+        {
+            // Insecure file or directory, and symlinks, fail closed.
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(trust::load_from(&root, "user@example.com").is_err());
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+            fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+            assert!(trust::load_from(&root, "user@example.com").is_err());
+            fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+            let link = dir.path().join("link");
+            std::os::unix::fs::symlink(&root, &link).unwrap();
+            assert!(trust::load_from(&link, "user@example.com").is_err());
+        }
         fs::write(&path, b"{not json").unwrap();
+        #[cfg(unix)]
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         assert!(trust::load_from(&root, "user@example.com").is_err());
     }
