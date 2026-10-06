@@ -121,6 +121,8 @@ The `.p8` does not replace reviewer-session authentication.
 
 ### Session setup and renewal
 
+Use your primary Apple Account email (not a phone number or email alias). If the saved ASC session or overlay is malformed, or preflight is refused, `reviewer-login --fresh` skips preflight for recovery while still reusing valid login cookies. Malformed or insecure login-cookie storage remains an error: fix its permissions or remove the private `credentials-login/trust.json` before logging in again. The login-only store can contain full Apple session credentials as well as device-trust cookies.
+
 Run `reviewer-login` yourself in a terminal; supply the Apple ID, password and
 2FA code there. Successful native login saves a private session, never the
 password. For Docker, run `./script/docker/reviewer-login.sh stack` (or
@@ -130,6 +132,31 @@ with mode 600; no manual copying is needed. The running reviewer reloads cookies
 on each call, so replacing the file does not require a rebuild.
 When changing API credential environment variables, recreate the container with
 `./script/docker/compose.sh stack up -d asc-mcp`.
+
+**Trusted-device cookies and session reuse.** Login first checks the existing session
+(source plus rotation overlay) against Apple's Olympus endpoint. It is reused, with rotated
+cookies saved and no password prompt, only when Apple reports the same `user.emailAddress`
+(case-insensitive, trimmed) as the requested Apple ID. A 401, a different account or a missing
+identity starts one fresh interactive login; a network error, malformed reply, 403 or other
+status stops without prompting. Trusted-device cookies from a confirmed login are kept in a
+private, login-only directory, bound to a hash of the Apple ID (never the identity, password
+or codes), and the reviewer service never mounts or reads it. The Docker helper uses
+`~/.config/asc-mcp/credentials-login` (mounted at `/login-trust`, override with
+`ASC_REVIEW_TRUST_ROOT`); a native run defaults to `<HOME>/Library/Application Support/InterceptorReview/login-trust`.
+`ASC_REVIEW_COOKIE_PATH` selects the session read by the service and login preflight. Native new logins save to `<HOME>/Library/Application Support/InterceptorReview/session.cookie`; update a custom native source with that confirmed file before resuming checks. The Docker command below maps both paths to the same host file, so no copying is needed.
+
+`ASC_REVIEW_STATE_ROOT` selects the overlay/lock directory shared with the service
+(default: the private root). To run the container yourself from this repository (run `./script/docker/setup.sh` once to create the private directories):
+
+```sh
+docker compose --env-file ~/.config/asc-mcp/runtime.env -p asc-mcp -f compose.yaml run --rm --no-deps \
+  --env HOME=/login-home \
+  --env 'ASC_REVIEW_STATE_ROOT=/state/Library/Application Support/InterceptorReview' \
+  --env ASC_REVIEW_TRUST_ROOT=/login-trust \
+  --volume ~/.config/asc-mcp/credentials:'/login-home/Library/Application Support/InterceptorReview':rw \
+  --volume ~/.config/asc-mcp/credentials-login:/login-trust:rw \
+  asc-mcp reviewer-login
+```
 
 A session can expire or be revoked by Apple. Monitoring reports authentication
 failure and does not automatically prompt for credentials; rerun terminal login

@@ -48,7 +48,7 @@ struct Cookie {
     expires: Option<String>,
 }
 
-fn private_root() -> Result<PathBuf> {
+pub(crate) fn private_root() -> Result<PathBuf> {
     Ok(PathBuf::from(
         std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))
@@ -57,7 +57,94 @@ fn private_root() -> Result<PathBuf> {
     .join("Library/Application Support/InterceptorReview"))
 }
 
-fn private_read(path: &Path, max: usize) -> Result<Vec<u8>> {
+pub(crate) fn session_source() -> Result<PathBuf> {
+    Ok(std::env::var_os("ASC_REVIEW_COOKIE_PATH")
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or(private_root()?.join("session.cookie")))
+}
+
+/// Overlay/lock directory. `ASC_REVIEW_STATE_ROOT` lets a one-off login container share the
+/// service state mount while its HOME is elsewhere; the default is the private root.
+pub(crate) fn state_root() -> Result<PathBuf> {
+    match std::env::var_os("ASC_REVIEW_STATE_ROOT").filter(|s| !s.is_empty()) {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => private_root(),
+    }
+}
+
+/// Login-only trusted-device cookie directory; the reviewer service never reads it.
+pub(crate) fn trust_root() -> Result<PathBuf> {
+    match std::env::var_os("ASC_REVIEW_TRUST_ROOT").filter(|s| !s.is_empty()) {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => Ok(private_root()?.join("login-trust")),
+    }
+}
+
+/// The effective existing reviewer session (source plus rotation overlay) as seen by CLI login.
+pub(crate) struct Reusable {
+    source: PathBuf,
+    root: PathBuf,
+    generation: String,
+    cookies: Vec<Cookie>,
+    header: String,
+}
+impl Reusable {
+    /// `None` when no usable session exists. Malformed, insecure or symlinked files fail closed.
+    pub(crate) async fn load() -> Result<Option<Self>> {
+        Self::from_paths(session_source()?, state_root()?).await
+    }
+    pub(crate) async fn from_paths(source: PathBuf, root: PathBuf) -> Result<Option<Self>> {
+        match fs::symlink_metadata(&source) {
+            Ok(_) => (),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => bail!("reviewer_private_file_unreadable"),
+        }
+        let snapshot = match session::load(source.clone(), root.clone()).await {
+            Ok(s) => s,
+            // Only expired/absent ASC cookies: treated as no reusable session.
+            Err(e)
+                if e.to_string()
+                    .starts_with("reviewer_session_required: no unexpired") =>
+            {
+                return Ok(None);
+            }
+            Err(e) => return Err(e),
+        };
+        let Ok(header) = cookie_header(&snapshot.cookies) else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            source,
+            root,
+            generation: snapshot.generation,
+            cookies: snapshot.cookies,
+            header,
+        }))
+    }
+    pub(crate) fn source_path(&self) -> &Path {
+        &self.source
+    }
+    pub(crate) fn cookie_header(&self) -> &str {
+        &self.header
+    }
+    /// Atomically save rotated ASC cookies into the private overlay; no password involved.
+    pub(crate) async fn save_rotation(&self, headers: &HeaderMap, url: &Url) -> Result<()> {
+        let updates = session::updates(headers, url, &self.cookies);
+        if updates.is_empty() {
+            return Ok(());
+        }
+        session::persist(
+            self.source.clone(),
+            self.root.clone(),
+            self.generation.clone(),
+            updates,
+        )
+        .await
+    }
+}
+
+pub(crate) fn private_read(path: &Path, max: usize) -> Result<Vec<u8>> {
     let meta = fs::symlink_metadata(path).map_err(|_| {
         anyhow::anyhow!("reviewer_session_required: import a valid Apple ID session")
     })?;
@@ -105,7 +192,7 @@ fn ensure_root(root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn atomic_json(path: &Path, value: &Value) -> Result<Vec<u8>> {
+pub(crate) fn atomic_json(path: &Path, value: &Value) -> Result<Vec<u8>> {
     let bytes = serde_json::to_vec_pretty(value)?;
     if bytes.len() > MAX_BODY {
         bail!("reviewer_private_file_too_large");
@@ -217,8 +304,7 @@ fn import_into(source: &Path, root: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Save a native login's web cookies without persisting the account identifier.
-pub fn save_login_session(_email: &str, cookies: Value) -> Result<PathBuf> {
+pub(crate) fn login_session_data(cookies: Value) -> Result<Value> {
     let bytes =
         serde_json::to_vec(&cookies).map_err(|_| anyhow::anyhow!("reviewer_session_invalid"))?;
     if bytes.len() > MAX_SESSION {
@@ -226,8 +312,13 @@ pub fn save_login_session(_email: &str, cookies: Value) -> Result<PathBuf> {
     }
     let cookies = parse_cookies(&bytes)?;
     cookie_header(&cookies)?;
+    Ok(json!({"cookies":cookies}))
+}
+/// Save a native login's web cookies without persisting the account identifier.
+pub fn save_login_session(_email: &str, cookies: Value) -> Result<PathBuf> {
+    let data = login_session_data(cookies)?;
     let path = private_root()?.join("session.cookie");
-    atomic_json(&path, &json!({"cookies":cookies}))?;
+    atomic_json(&path, &data)?;
     Ok(path)
 }
 
@@ -336,11 +427,8 @@ impl Reviewer {
 
     /// Explicit CLI checks construct a client even when authentication is missing.
     pub fn new_default() -> Result<Self> {
-        let root = private_root()?;
-        let cookie_path = std::env::var_os("ASC_REVIEW_COOKIE_PATH")
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| root.join("session.cookie"));
+        let root = state_root()?;
+        let cookie_path = session_source()?;
         let app_id = std::env::var("ASC_REVIEW_APP_ID").unwrap_or_else(|_| "6749347474".into());
         if app_id.is_empty() || !app_id.bytes().all(|b| b.is_ascii_digit()) {
             bail!("invalid_app_id");

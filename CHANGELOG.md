@@ -12,6 +12,8 @@ under `## [Unreleased]` until a release is cut.
 ## [Unreleased]
 
 ### Fixed
+- Reuse verified reviewer sessions and preserve account-bound login cookies for
+  interactive reauthentication, with isolated Docker storage and a `--fresh` recovery option.
 - Finalize uploaded assets with MD5 checksums accepted by App Store Connect,
   including build uploads, instead of rejected SHA-256 checksums.
 - Persist reviewer response cookie rotation/deletion privately across requests

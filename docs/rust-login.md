@@ -73,3 +73,23 @@ and fastlane-sirp 1.1.0 source, and the public
 [fastlane authentication client](https://github.com/fastlane/fastlane/blob/master/spaceship/lib/spaceship/client.rb)
 and [two-factor client](https://github.com/fastlane/fastlane/blob/master/spaceship/lib/spaceship/two_step_or_factor_client.rb).
 These are interoperability references rather than an Apple-supported login API.
+
+## Session reuse and trusted-device cookies
+
+Before prompting, login loads the effective existing session (source plus the shared rotation
+overlay) and calls Olympus `/session`. The session is reused only on HTTP 200 whose
+`user.emailAddress` equals the requested Apple ID (trimmed, case-insensitive); rotated
+cookies are saved atomically and no password is requested. A provider object alone is never
+accepted. 401, a different account, or no identity falls through to one interactive login;
+network errors, malformed bodies, 403 and other statuses fail closed. A new login is saved only
+after Olympus confirms the same identity, and a failed login leaves the old session untouched.
+
+IDMSA trusted-device cookies (including valid broad `apple.com` cookies from IDMSA) are kept
+with full scope metadata in `trust.json` (mode 600) inside `ASC_REVIEW_TRUST_ROOT` (mode 700;
+default `<private root>/login-trust`; Docker helper: `credentials-login`). The file stores a
+SHA-256 account fingerprint, not the Apple ID. Only matching-account trust is loaded; a missing
+file is normal, while insecure, symlinked or malformed storage fails closed. Trust is written
+after identity confirmation, before the ASC session, and replaced on account change only then.
+Widget discovery uses a separate empty client; trust is seeded only into the authentication
+client, as one URL-selected `Cookie` header on IDMSA requests (DES values quoted). It is never
+sent to ASC. `rememberMe` stays false. The reviewer service never reads the trust directory.

@@ -48,6 +48,9 @@ enum Command {
     ReviewerLogin {
         #[arg(long)]
         apple_id: Option<String>,
+        /// Skip session preflight for recovery; still reuse private trust cookies.
+        #[arg(long)]
+        fresh: bool,
     },
 }
 #[tokio::main]
@@ -130,7 +133,7 @@ async fn run() -> Result<()> {
             }
             Ok(())
         }
-        Command::ReviewerLogin { apple_id } => {
+        Command::ReviewerLogin { apple_id, fresh } => {
             use std::io::{IsTerminal, Write};
             if !std::io::stdin().is_terminal() {
                 bail!(
@@ -146,7 +149,7 @@ async fn run() -> Result<()> {
                 std::io::stdin().read_line(&mut value)?;
                 value.trim().to_owned()
             };
-            let path = asc_mcp::apple_login::login(&email).await?;
+            let path = asc_mcp::apple_login::login_with_options(&email, fresh).await?;
             println!("Session saved privately to {}", path.display());
             Ok(())
         }
