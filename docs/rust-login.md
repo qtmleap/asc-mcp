@@ -7,9 +7,10 @@ asc-mcp reviewer-login --apple-id you@example.com
 ```
 
 Run this yourself in an interactive terminal. The password and verification codes
-are hidden as you type. Passwords are not taken from command-line arguments,
-environment variables, cached credential stores, or browser state. MCP requests
-never invoke this flow or prompt for login. Neither Ruby, fastlane, Go, nor a
+are hidden as you type. Passwords are never taken from command-line arguments, environment variables,
+plaintext files, or browser state. On macOS the native CLI reuses the confirmed
+password from Keychain. MCP requests never prompt for passwords or codes; a
+separate Mac host renewal helper performs unattended SRP authentication. Neither Ruby, fastlane, Go, nor a
 browser is used at runtime.
 
 Supported protocol paths are Apple's SRP-6a 2048-bit/SHA256 `s2k` and `s2k_fo`,
@@ -25,9 +26,11 @@ Olympus session endpoint. It then writes only applicable cookies to
 `~/Library/Application Support/ASC MCP/session.cookie`, using the
 reviewer's canonical JSON format and atomic private-file writer. The directory
 has mode 700 and the file has mode 600 on Unix. An existing session is replaced
-only after the new session is confirmed. The password is never persisted.
+only after the new session is confirmed. The confirmed account and provider are remembered in private host-only storage.
+On macOS the password is saved to Keychain after confirmation; Linux continues
+to use an interactive password prompt without storing it.
 
-The login HTTP client has an empty cookie jar, a request timeout, disabled
+Widget discovery has an empty cookie jar; authentication seeds matching trust cookies. The login HTTP client has a request timeout, disabled
 redirects and retries, and fixed HTTPS origins `idmsa.apple.com` and
 `appstoreconnect.apple.com`. Apple authentication headers are sent only to IDMSA.
 The public widget key is discovered from a fresh HEAD `/logout` redirect without
@@ -93,3 +96,11 @@ after identity confirmation, before the ASC session, and replaced on account cha
 Widget discovery uses a separate empty client; trust is seeded only into the authentication
 client, as one URL-selected `Cookie` header on IDMSA requests (DES values quoted). It is never
 sent to ASC. `rememberMe` stays false. The reviewer service never reads the trust directory.
+
+## Automatic renewal on macOS
+
+Install `script/macos/install-renewal-agent.sh --binary /absolute/path/to/asc-mcp`, then enroll with `script/docker/reviewer-login.sh stack --fresh`. Interactive enrollment and launchd use the same stable binary. Successful human login clears the renewal latch. `reviewer-renew` is noninteractive: it checks the effective session before reading Keychain and stops on 409 before the challenge flow. Apple may itself require verification during SRP; renewal then waits for human login.
+
+The host lock serializes interactive and automatic authentication. Rejected credentials, required verification, missing or invalid secrets and team changes remain latched for the same session generation. Network, locked/unauthorized Keychain and storage failures use a five-minute cooldown. Confirmed sessions are atomically published to the configured source; older overlays are excluded by fingerprint. Automatic provider changes are refused before session or credential publication.
+
+The container writes a fixed advisory marker and waits at most 30 seconds. The host never takes account, command or path choices from it. GET is replayed once after renewal or acknowledged preflight; POST is never replayed. Linux builds exclude Security-framework code and keep manual login. Synthetic tests do not establish real session longevity; live Keychain behavior requires human enrollment, and eight-hour endurance requires observation.

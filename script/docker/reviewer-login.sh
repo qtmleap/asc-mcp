@@ -16,6 +16,9 @@ if [ ! -t 0 ] || [ ! -t 2 ]; then
   printf 'Reviewer login requires an interactive terminal for password and 2FA.\n' >&2
   exit 2
 fi
+if [ "$(uname -s)" = Darwin ]; then
+  exec "$repo_dir/script/macos/reviewer-login.sh" "$@"
+fi
 config_dir=${ASC_MCP_CONFIG_DIR:-"$HOME/.config/asc-mcp"}
 [ -d "$config_dir/credentials" ] || "$repo_dir/script/docker/setup.sh"
 config_dir=$(CDPATH= cd -- "$config_dir" && pwd)

@@ -61,28 +61,20 @@ source/workspace mount is required by this sidecar.
 
 ## Log in or renew the reviewer session
 
-Run the native Rust login in a disposable Docker container from an interactive
-terminal:
+On macOS, install the native host helper and enroll once:
 
 ```sh
-./script/docker/reviewer-login.sh stack
-# For a standalone installation:
-./script/docker/reviewer-login.sh standalone
+cargo build --release --locked
+./script/macos/install-renewal-agent.sh --binary "$PWD/target/release/asc-mcp"
+./script/docker/reviewer-login.sh stack --fresh
+ASC_REVIEW_RENEWAL_WAIT_SECS=30 ./script/docker/compose.sh stack up -d --build asc-mcp
 ```
 
-Enter the Apple ID, password, and any required 2FA code in that terminal.
-The helper can also be launched by a local agent with an interactive terminal;
-passwords and codes must not be passed in MCP arguments, chat, or command lines.
-It refuses noninteractive execution, so scheduled checks cannot start login.
+The helper remembers the confirmed Apple ID and team, saves the confirmed password in macOS Keychain and reuses trusted-device cookies. Its LaunchAgent checks periodically and wakes on the advisory renewal marker. Persist `ASC_REVIEW_RENEWAL_WAIT_SECS=30` in private `runtime.env` across later service recreation. Docker credentials stay read-only; Keychain and login trust stay on the host.
 
-Only this one-off container mounts the private credentials directory writable
-at the login's save path. The running service keeps its read-only credentials
-mount. A successfully confirmed login atomically replaces `session.cookie`
-in the existing host credentials directory; the monitoring service uses it on
-the next request without restarting. A failed login leaves the existing file
-intact. The one-off container is removed when login ends and publishes no ports.
-No host Rust installation or manual Cookie copying is required. Build the image
-with the startup commands above before using the helper.
+Required verification, rejected credentials, unavailable Keychain access and team changes produce a sanitized user-action state and stop automatic password attempts. Re-run interactive login when required; `--fresh` enrolls a replacement password. Never pass passwords/codes through chat, MCP arguments, argv or environment. The service waits at most 30 seconds and replays GET once, never POST.
+
+Linux retains `./script/docker/reviewer-login.sh stack` (or `standalone`) in a disposable interactive login container. It remembers the account but does not store passwords or renew unattended. Confirmed login writes the configured cookie source, reloaded without restart. Failed authentication does not replace the source.
 
 A bare `docker run` with the image's default command must supply
 `ASC_MCP_AUTH_TOKENS`; without it the non-loopback HTTP listener refuses to
@@ -104,3 +96,7 @@ The Docker CI smoke test starts the image without stdin, checks `/healthz`,
 checks that unauthenticated MCP is denied, and performs an authenticated MCP
 initialize request. The distroless runtime has no shell or curl; these probes
 run from the host or client container.
+
+To stop automatic authentication, unload `work.asc-mcp.reviewer-renewal` with `launchctl bootout gui/$(id -u)/work.asc-mcp.reviewer-renewal` before removing the session source. Removing the source alone does not revoke an enrolled host helper: it can create a new session from Keychain. The Mac wrapper is the supported enrollment path on Mac; do not run a Linux login container concurrently against the host trust store.
+
+If the native helper binary changes, macOS may require Keychain authorization for its new code identity. Re-run the Mac login wrapper with `--fresh` after an upgrade; unattended access never opens UI. Missing provider pins require this initial enrollment but do not invalidate an already healthy reviewer session. Network, Keychain-access and storage interruptions use bounded retry; identity mismatches, refused credentials and Apple verification requirements stop repeated authentication.

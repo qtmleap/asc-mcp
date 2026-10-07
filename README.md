@@ -132,29 +132,22 @@ Set `ASC_REVIEW_APP_ID` explicitly for reply monitoring; no app is selected by
 default. Session/status and per-app tools remain available without a monitor ID.
 
 
-Use your primary Apple Account email (not a phone number or email alias). If the saved ASC session or overlay is malformed, or preflight is refused, `reviewer-login --fresh` skips preflight for recovery while still reusing valid login cookies. Malformed or insecure login-cookie storage remains an error: fix its permissions or remove the private `credentials-login/trust.json` before logging in again. The login-only store can contain full Apple session credentials as well as device-trust cookies.
+Use your primary Apple Account email. Interactive login remembers the confirmed account and App Store Connect provider in private host-only storage. On macOS it saves the confirmed password in Keychain through native APIs and later reuses it. Passwords and codes never appear in argv, environment variables, files or MCP output. `--fresh` bypasses preflight and requests a replacement password; use it for initial enrollment or a stale password. `--accept-provider-change` explicitly permits a different confirmed Apple team; unattended renewal never changes the pinned team.
 
-Run `reviewer-login` yourself in a terminal; supply the Apple ID, password and
-2FA code there. Successful native login saves a private session, never the
-password. For Docker, run `./script/docker/reviewer-login.sh stack` (or
-`standalone`) in an interactive terminal. The disposable container saves the
-confirmed session directly to `~/.config/asc-mcp/credentials/session.cookie`
-with mode 600; no manual copying is needed. The running reviewer reloads cookies
-on each call, so replacing the file does not require a rebuild.
-When changing API credential environment variables, recreate the container with
-`./script/docker/compose.sh stack up -d asc-mcp`.
+For macOS Docker installations, install the stable native helper once:
 
-**Trusted-device cookies and session reuse.** Login first checks the existing session
-(source plus rotation overlay) against Apple's Olympus endpoint. It is reused, with rotated
-cookies saved and no password prompt, only when Apple reports the same `user.emailAddress`
-(case-insensitive, trimmed) as the requested Apple ID. A 401, a different account or a missing
-identity starts one fresh interactive login; a network error, malformed reply, 403 or other
-status stops without prompting. Trusted-device cookies from a confirmed login are kept in a
-private, login-only directory, bound to a hash of the Apple ID (never the identity, password
-or codes), and the reviewer service never mounts or reads it. The Docker helper uses
-`~/.config/asc-mcp/credentials-login` (mounted at `/login-trust`, override with
-`ASC_REVIEW_TRUST_ROOT`); a native run defaults to `login-trust` beneath the effective private root (`<HOME>/Library/Application Support/ASC MCP` for new installations).
-`ASC_REVIEW_COOKIE_PATH` selects the session read by the service and login preflight. Native new logins save to `session.cookie` beneath the effective private root; update a custom native source with that confirmed file before resuming checks. The Docker command below maps both paths to the same host file, so no copying is needed.
+```sh
+cargo build --release --locked
+./script/macos/install-renewal-agent.sh --binary "$PWD/target/release/asc-mcp"
+./script/docker/reviewer-login.sh stack --fresh
+ASC_REVIEW_RENEWAL_WAIT_SECS=30 ./script/docker/compose.sh stack up -d --build asc-mcp
+```
+
+The first interactive login enrolls the account/password and handles any Apple verification. The host LaunchAgent checks the effective session every 15 minutes and wakes when a reviewer GET encounters authentication failure. It owns Keychain and the separate `credentials-login` trust directory. The container receives only confirmed ASC cookies and sanitized renewal status. Verification requirements, rejected credentials and team changes stop repeated attempts until successful human login. Locked/unavailable Keychain access also returns a user-action state without opening unattended UI.
+
+The service retries GET once, waiting at most 30 seconds; POST is never replayed. Enable recovery persistently by adding `ASC_REVIEW_RENEWAL_WAIT_SECS=30` to private `runtime.env` and recreating only `asc-mcp`. Recovery is disabled by default without a host agent. Linux retains manual Docker login and remembered account, without password storage or unattended renewal.
+
+`ASC_REVIEW_COOKIE_PATH` is both the session source and confirmed-login destination. `ASC_REVIEW_TRUST_ROOT` selects the separate login-only directory. The Mac helper maps existing Docker paths to their host counterparts, preserving legacy state-directory selection. A changed source generation invalidates older cookie overlays. Passwords and login trust are never mounted into the running service.
 
 `ASC_REVIEW_STATE_ROOT` selects the overlay/lock directory shared with the service
 (default: the private root). To run the container yourself from this repository (run `./script/docker/setup.sh` once to create the private directories):
@@ -178,9 +171,10 @@ docker compose --env-file ~/.config/asc-mcp/runtime.env -p asc-mcp -f compose.ya
   asc-mcp reviewer-login
 ```
 
-A session can expire or be revoked by Apple. Monitoring reports authentication
-failure and does not automatically prompt for credentials; rerun terminal login
-when required. The configured 30-minute monitor only
+A session can expire or be revoked by Apple. With Mac renewal enabled, expired
+sessions are renewed using Keychain and trusted-device cookies. Run interactive
+login when Apple requires verification or refuses stored credentials. Scheduled
+checks never prompt or request verification codes themselves. The configured 30-minute monitor only
 checks, analyses and acknowledges reviewed snapshots. It never automatically
 replies, uploads a build or submits an app.
 
@@ -335,3 +329,7 @@ cookies or passwords in MCP tool arguments or Git.
 
 MIT. The original tool definitions and behaviour are derived from the upstream
 Go project; its licence is retained in [LICENSE](LICENSE).
+
+To stop automatic authentication, unload `work.asc-mcp.reviewer-renewal` with `launchctl bootout gui/$(id -u)/work.asc-mcp.reviewer-renewal` before removing the session source. Removing the source alone does not revoke an enrolled host helper: it can create a new session from Keychain. The Mac wrapper is the supported enrollment path on Mac; do not run a Linux login container concurrently against the host trust store.
+
+If the native helper binary changes, macOS may require Keychain authorization for its new code identity. Re-run the Mac login wrapper with `--fresh` after an upgrade; unattended access never opens UI. Missing provider pins require this initial enrollment but do not invalidate an already healthy reviewer session. Network, Keychain-access and storage interruptions use bounded retry; identity mismatches, refused credentials and Apple verification requirements stop repeated authentication.

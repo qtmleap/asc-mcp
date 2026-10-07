@@ -37,6 +37,12 @@ cookie = "0.18"
 fs2 = "0.4"
 axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 httpmock = "0.8"
 p256 = { version = "0.13", features = ["pkcs8", "pem"] }

@@ -45,12 +45,16 @@ enum Command {
     ReviewerImportSession {
         source: PathBuf,
     },
+    ReviewerRenew,
     ReviewerLogin {
         #[arg(long)]
         apple_id: Option<String>,
         /// Skip session preflight for recovery; still reuse private trust cookies.
         #[arg(long)]
         fresh: bool,
+        /// Explicitly accept a different App Store Connect team after human login.
+        #[arg(long)]
+        accept_provider_change: bool,
     },
 }
 #[tokio::main]
@@ -133,23 +137,33 @@ async fn run() -> Result<()> {
             }
             Ok(())
         }
-        Command::ReviewerLogin { apple_id, fresh } => {
+        Command::ReviewerRenew => {
+            println!("{}", asc_mcp::renewal::run_once().await?);
+            Ok(())
+        }
+        Command::ReviewerLogin {
+            apple_id,
+            fresh,
+            accept_provider_change,
+        } => {
             use std::io::{IsTerminal, Write};
             if !std::io::stdin().is_terminal() {
                 bail!(
                     "reviewer-login requires an interactive terminal; scheduled checks never request passwords or 2FA"
                 )
             }
-            let email = if let Some(email) = apple_id {
-                email
-            } else {
-                print!("Apple ID: ");
-                std::io::stdout().flush()?;
-                let mut value = String::new();
-                std::io::stdin().read_line(&mut value)?;
-                value.trim().to_owned()
-            };
-            let path = asc_mcp::apple_login::login_with_options(&email, fresh).await?;
+            let email =
+                if let Some(email) = asc_mcp::apple_login::resolve_account(apple_id.as_deref())? {
+                    email
+                } else {
+                    print!("Apple ID: ");
+                    std::io::stdout().flush()?;
+                    let mut value = String::new();
+                    std::io::stdin().read_line(&mut value)?;
+                    value.trim().to_owned()
+                };
+            let path =
+                asc_mcp::renewal::interactive_login(&email, fresh, accept_provider_change).await?;
             println!("Session saved privately to {}", path.display());
             Ok(())
         }

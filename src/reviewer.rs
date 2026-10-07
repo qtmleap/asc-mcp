@@ -5,19 +5,26 @@ use reqwest::{Client, Method, header::HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
+#[cfg(any(not(unix), test))]
+use std::fs::OpenOptions;
+#[cfg(not(unix))]
+use std::io::Read;
+#[cfg(any(not(unix), test))]
+use std::io::Write;
+#[cfg(all(unix, test))]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::{
     collections::{BTreeMap, HashSet},
-    fs::{self, OpenOptions},
-    io::{Read, Write},
+    fs,
     path::{Path, PathBuf},
     time::Duration,
 };
 use url::Url;
 
+#[cfg(unix)]
+mod fs_safe;
+#[cfg(test)]
+mod recovery_tests;
 #[cfg(test)]
 mod refresh_tests;
 mod session;
@@ -35,6 +42,8 @@ pub struct Reviewer {
     app_id: String,
     legacy_reply: bool,
     limits: status::Limits,
+    recovery_wait: Duration,
+    recovery_lock: tokio::sync::Mutex<Option<(String, std::time::Instant, bool)>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -166,6 +175,12 @@ impl Reusable {
     }
 }
 
+#[cfg(unix)]
+pub(crate) fn private_read(path: &Path, max: usize) -> Result<Vec<u8>> {
+    fs_safe::private_read(path, max)
+}
+
+#[cfg(not(unix))]
 pub(crate) fn private_read(path: &Path, max: usize) -> Result<Vec<u8>> {
     let meta = fs::symlink_metadata(path).map_err(|_| {
         anyhow::anyhow!("reviewer_session_required: import a valid Apple ID session")
@@ -173,26 +188,12 @@ pub(crate) fn private_read(path: &Path, max: usize) -> Result<Vec<u8>> {
     if !meta.is_file() {
         bail!("reviewer_private_file_required");
     }
-    #[cfg(unix)]
-    if meta.permissions().mode() & 0o077 != 0 {
-        bail!("reviewer_session_permissions: file must have mode 600");
-    }
     if meta.len() > max as u64 {
         bail!("reviewer_private_file_too_large");
     }
     let mut bytes = Vec::new();
     let file =
         fs::File::open(path).map_err(|_| anyhow::anyhow!("reviewer_private_file_unreadable"))?;
-    #[cfg(unix)]
-    {
-        let opened = file.metadata()?;
-        if opened.ino() != meta.ino()
-            || opened.dev() != meta.dev()
-            || opened.permissions().mode() & 0o077 != 0
-        {
-            bail!("reviewer_private_file_changed");
-        }
-    }
     file.take(max as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| anyhow::anyhow!("reviewer_private_file_unreadable"))?;
@@ -202,16 +203,53 @@ pub(crate) fn private_read(path: &Path, max: usize) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn ensure_root(root: &Path) -> Result<()> {
+#[cfg(unix)]
+pub(crate) fn ensure_root(root: &Path) -> Result<()> {
+    fs_safe::ensure_root(root)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn ensure_root(root: &Path) -> Result<()> {
     if !root.exists() {
         fs::create_dir_all(root).map_err(|_| anyhow::anyhow!("reviewer_state_unwritable"))?;
     }
     if !fs::symlink_metadata(root)?.is_dir() {
         bail!("reviewer_private_directory_required");
     }
-    #[cfg(unix)]
-    fs::set_permissions(root, fs::Permissions::from_mode(0o700))?;
     Ok(())
+}
+
+#[cfg(unix)]
+pub(crate) fn open_private_lock(root: &Path, name: &str) -> Result<fs::File> {
+    fs_safe::private_lock(root, name)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn open_private_lock(root: &Path, name: &str) -> Result<fs::File> {
+    let mut parts = Path::new(name).components();
+    if !matches!(parts.next(), Some(std::path::Component::Normal(_))) || parts.next().is_some() {
+        bail!("reviewer_state_path_invalid");
+    }
+    ensure_root(root)?;
+    let path = root.join(name);
+    if path.exists() && !fs::symlink_metadata(&path)?.is_file() {
+        bail!("reviewer_private_file_required");
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|_| anyhow::anyhow!("reviewer_session_lock_unwritable"))?;
+    if !fs::symlink_metadata(&path)?.is_file() {
+        bail!("reviewer_private_file_required");
+    }
+    Ok(file)
+}
+
+pub(crate) fn publish_login_session(source: &Path, data: &Value) -> Result<()> {
+    session::replace(source, &state_root()?, data)
 }
 
 pub(crate) fn atomic_json(path: &Path, value: &Value) -> Result<Vec<u8>> {
@@ -219,6 +257,17 @@ pub(crate) fn atomic_json(path: &Path, value: &Value) -> Result<Vec<u8>> {
     if bytes.len() > MAX_BODY {
         bail!("reviewer_private_file_too_large");
     }
+    write_private_atomic(path, &bytes)?;
+    Ok(bytes)
+}
+
+#[cfg(unix)]
+fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    fs_safe::atomic_write(path, bytes)
+}
+
+#[cfg(not(unix))]
+fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path.parent().context("reviewer_state_path_invalid")?;
     ensure_root(parent)?;
     let mut attempt = 0;
@@ -231,8 +280,6 @@ pub(crate) fn atomic_json(path: &Path, value: &Value) -> Result<Vec<u8>> {
         ));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        options.mode(0o600);
         match options.open(&tmp) {
             Ok(f) => break (tmp, f),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && attempt < 10 => attempt += 1,
@@ -240,7 +287,7 @@ pub(crate) fn atomic_json(path: &Path, value: &Value) -> Result<Vec<u8>> {
         }
     };
     let result = (|| -> Result<()> {
-        file.write_all(&bytes)?;
+        file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temporary, path)?;
         Ok(())
@@ -249,7 +296,7 @@ pub(crate) fn atomic_json(path: &Path, value: &Value) -> Result<Vec<u8>> {
         let _ = fs::remove_file(&temporary);
         bail!("reviewer_state_unwritable");
     }
-    Ok(bytes)
+    Ok(())
 }
 
 // serde_yaml treats Ruby object tags as data; never instantiate tagged objects.
@@ -406,18 +453,7 @@ fn redact_cookie_values(value: &mut Value, cookies: &[Cookie]) {
 struct MonitorLock(fs::File);
 impl MonitorLock {
     fn acquire(root: &Path) -> Result<Self> {
-        ensure_root(root)?;
-        let path = root.join(".monitor.lock");
-        if path.exists() && !fs::symlink_metadata(&path)?.is_file() {
-            bail!("reviewer_private_file_required")
-        }
-        let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(false);
-        #[cfg(unix)]
-        options.mode(0o600);
-        let file = options
-            .open(path)
-            .map_err(|_| anyhow::anyhow!("reviewer_state_unwritable"))?;
+        let file = open_private_lock(root, ".monitor.lock")?;
         fs2::FileExt::try_lock_exclusive(&file).map_err(|_| {
             anyhow::anyhow!("reviewer_monitor_busy: another check or acknowledgement is active")
         })?;
@@ -463,6 +499,8 @@ impl Reviewer {
             origin: Url::parse(ORIGIN)?,
             app_id,
             limits: status::Limits::default(),
+            recovery_wait: crate::renewal::configured_wait()?,
+            recovery_lock: tokio::sync::Mutex::new(None),
             legacy_reply: matches!(
                 std::env::var("ASC_REVIEW_ENABLE_LEGACY_REPLY").as_deref(),
                 Ok("1" | "true")
@@ -489,6 +527,8 @@ impl Reviewer {
             app_id: "123".into(),
             legacy_reply: false,
             limits: status::Limits::default(),
+            recovery_wait: Duration::ZERO,
+            recovery_lock: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -534,6 +574,114 @@ impl Reviewer {
     }
 
     async fn request(
+        &self,
+        method: Method,
+        url: Url,
+        payload: Option<Value>,
+        csrf: Option<&HeaderMap>,
+    ) -> Result<(Value, HeaderMap)> {
+        let generation = crate::renewal::source_generation(&self.cookie_path).ok();
+        let result = self
+            .request_once(method.clone(), url.clone(), payload.clone(), csrf)
+            .await;
+        let needs_auth = result.as_ref().err().is_some_and(|e| {
+            let message = e.to_string();
+            message.starts_with("reviewer_auth_required")
+                || message.starts_with("reviewer_session_required")
+        });
+        if method != Method::GET || !needs_auth {
+            return result;
+        }
+        if let Some(generation) = generation {
+            let changed = crate::renewal::source_generation(&self.cookie_path)? != generation;
+            if changed {
+                return self.replay_once(method, url, payload, csrf).await;
+            }
+            if !self.recovery_wait.is_zero() {
+                let mut recovery = self.recovery_lock.lock().await;
+                if crate::renewal::source_generation(&self.cookie_path)? != generation {
+                    drop(recovery);
+                    return self.replay_once(method, url, payload, csrf).await;
+                }
+                if let Some((previous, finished, ready)) = recovery.as_ref()
+                    && previous == &generation
+                    && finished.elapsed() < Duration::from_secs(60)
+                {
+                    let ready = *ready;
+                    drop(recovery);
+                    return if ready {
+                        self.replay_once(method, url, payload, csrf).await
+                    } else {
+                        result
+                    };
+                }
+                let renewed = crate::renewal::wait_for_replacement(
+                    &self.cookie_path,
+                    &self.root,
+                    &generation,
+                    self.recovery_wait,
+                )
+                .await;
+                *recovery = Some((
+                    generation,
+                    std::time::Instant::now(),
+                    renewed.as_ref().is_ok_and(|ready| *ready),
+                ));
+                drop(recovery);
+                if renewed? {
+                    return self.replay_once(method, url, payload, csrf).await;
+                }
+            }
+        }
+        result
+    }
+
+    async fn replay_once(
+        &self,
+        method: Method,
+        url: Url,
+        payload: Option<Value>,
+        csrf: Option<&HeaderMap>,
+    ) -> Result<(Value, HeaderMap)> {
+        // Associate rejection with the source observed before this replay, never a later login.
+        let observed_generation = crate::renewal::source_generation(&self.cookie_path).ok();
+        let result = self.request_once(method, url, payload, csrf).await;
+        let apple_refused = result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error.to_string().starts_with("reviewer_auth_required"));
+        if apple_refused
+            && let Some(generation) = observed_generation
+            && crate::renewal::source_generation(&self.cookie_path)
+                .ok()
+                .as_deref()
+                == Some(generation.as_str())
+        {
+            let mut recovery = self.recovery_lock.lock().await;
+            // Waiting for another reader may have allowed the host to publish a newer source.
+            if crate::renewal::source_generation(&self.cookie_path)
+                .ok()
+                .as_deref()
+                == Some(generation.as_str())
+            {
+                *recovery = Some((generation.clone(), std::time::Instant::now(), false));
+                drop(recovery);
+                if crate::renewal::mark_read_refused(&self.cookie_path, &self.root, &generation)
+                    .is_err()
+                {
+                    eprintln!(
+                        "reviewer_renewal_refusal_unwritable: rejection marker could not be saved"
+                    );
+                }
+                bail!(
+                    "reviewer_auth_required: Apple rejected the renewed session; run script/docker/reviewer-login.sh stack --fresh on the Mac host"
+                );
+            }
+        }
+        result
+    }
+
+    async fn request_once(
         &self,
         method: Method,
         url: Url,
@@ -1069,6 +1217,8 @@ mod tests {
             app_id: "123".into(),
             legacy_reply: false,
             limits: status::Limits::default(),
+            recovery_wait: Duration::ZERO,
+            recovery_lock: tokio::sync::Mutex::new(None),
         };
         (dir, reviewer)
     }
@@ -1295,6 +1445,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         ensure_root(dir.path()).unwrap();
         fs::write(dir.path().join(".monitor.lock"), "dead-pid").unwrap();
+        #[cfg(unix)]
+        fs::set_permissions(
+            dir.path().join(".monitor.lock"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
         let lock = MonitorLock::acquire(dir.path()).unwrap();
         assert!(MonitorLock::acquire(dir.path()).is_err());
         drop(lock);
@@ -1415,6 +1571,8 @@ mod generic_storage_tests {
             app_id: String::new(),
             legacy_reply: false,
             limits: status::Limits::default(),
+            recovery_wait: Duration::ZERO,
+            recovery_lock: tokio::sync::Mutex::new(None),
         };
         assert_eq!(
             r.check_updates().await.unwrap_err().to_string(),

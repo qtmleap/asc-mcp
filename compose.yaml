@@ -12,6 +12,7 @@ services:
     environment:
       HOME: /state
       ASC_REVIEW_COOKIE_PATH: /run/asc-mcp/session.cookie
+      ASC_REVIEW_RENEWAL_WAIT_SECS: ${ASC_REVIEW_RENEWAL_WAIT_SECS:-0}
     ports:
       - '127.0.0.1:${ASC_MCP_PORT:-8878}:8080'
     volumes:

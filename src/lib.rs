@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod client;
 pub mod http;
 pub mod protocol;
+pub mod renewal;
 pub mod reviewer;
 pub mod uploads;
 

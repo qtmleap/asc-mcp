@@ -23,6 +23,7 @@ use std::{
 use url::Url;
 use zeroize::Zeroizing;
 
+mod credentials;
 mod trust;
 use trust::TrustCookie;
 
@@ -669,7 +670,7 @@ fn identity_matches(body: &Value, email: &str) -> bool {
         .is_some_and(|actual| actual.trim().to_lowercase() == email.trim().to_lowercase())
 }
 enum Preflight {
-    Reused,
+    Reused(u64),
     Fresh,
 }
 /// Check the existing effective session against the live origin. Fails closed on anything other
@@ -678,6 +679,8 @@ async fn preflight(
     origin: &str,
     email: &str,
     existing: &crate::reviewer::Reusable,
+    trust_root: &Path,
+    policy: ChallengePolicy,
 ) -> Result<Preflight> {
     let url = Url::parse(&format!("{origin}/olympus/v1/session"))
         .map_err(|_| anyhow::anyhow!("apple_login_invalid_endpoint"))?;
@@ -719,20 +722,59 @@ async fn preflight(
     if !identity_matches(&body, email) {
         return Ok(Preflight::Fresh);
     }
+    let provider = confirmed_provider(trust_root, email, &body, policy)?;
     existing
         .save_rotation(&headers, &url)
         .await
         .map_err(|_| anyhow::anyhow!("apple_login_session_save_failed"))?;
-    Ok(Preflight::Reused)
+    Ok(Preflight::Reused(provider))
+}
+#[derive(Clone, Copy)]
+enum ChallengePolicy {
+    Interactive,
+    InteractiveProviderOverride,
+    Unattended,
+}
+impl ChallengePolicy {
+    fn interactive(self) -> bool {
+        !matches!(self, Self::Unattended)
+    }
+}
+fn confirmed_provider(
+    root: &Path,
+    email: &str,
+    body: &Value,
+    policy: ChallengePolicy,
+) -> Result<u64> {
+    let provider = body["provider"]["providerId"].as_u64().filter(|id| *id > 0)
+        .ok_or_else(|| anyhow::anyhow!("apple_login_provider_required: confirm an App Store Connect provider with native reviewer-login"))?;
+    let expected = credentials::pinned_provider(root, email)?;
+    if matches!(policy, ChallengePolicy::Unattended) && expected.is_none() {
+        bail!(
+            "apple_login_provider_required: run native reviewer-login once to establish the provider"
+        );
+    }
+    if expected.is_some_and(|id| id != provider)
+        && !matches!(policy, ChallengePolicy::InteractiveProviderOverride)
+    {
+        bail!(
+            "apple_login_provider_changed: confirm the intended provider with reviewer-login --accept-provider-change"
+        );
+    }
+    Ok(provider)
 }
 async fn accept_completion(
     auth: &mut AuthClient,
     status: StatusCode,
+    policy: ChallengePolicy,
     challenge: impl std::ops::AsyncFnOnce(&mut AuthClient) -> Result<()>,
 ) -> Result<()> {
     match status.as_u16() {
         200 => Ok(()),
-        409 => challenge(auth).await,
+        409 if policy.interactive() => challenge(auth).await,
+        409 => bail!(
+            "apple_login_2fa_required: run native reviewer-login to complete Apple verification"
+        ),
         401 | 403 => bail!("apple_login_credentials_rejected"),
         412 => bail!(
             "apple_login_account_action_required: acknowledge Apple's account requirements, then retry"
@@ -746,52 +788,195 @@ fn finalize_confirmed(
     email: &str,
     trust_root: &Path,
     source: &Path,
+    policy: ChallengePolicy,
+) -> Result<PathBuf> {
+    finalize_with_publication(
+        auth,
+        session,
+        email,
+        trust_root,
+        source,
+        policy,
+        crate::reviewer::publish_login_session,
+    )
+}
+fn finalize_with_publication(
+    auth: &AuthClient,
+    session: &Reply,
+    email: &str,
+    trust_root: &Path,
+    source: &Path,
+    policy: ChallengePolicy,
+    publish: impl FnOnce(&Path, &Value) -> Result<()>,
 ) -> Result<PathBuf> {
     session.success()?;
+    let body = session.json()?;
     ensure!(
-        identity_matches(&session.json()?, email),
+        identity_matches(&body, email),
         "apple_login_session_not_confirmed: use the primary Apple Account email"
     );
-    // Validate both snapshots before writing either; only confirmed authentication may replace them.
+    let provider = confirmed_provider(trust_root, email, &body, policy)?;
+    // Validate identity, provider and snapshots before writing; only confirmed authentication replaces them.
     let data = crate::reviewer::login_session_data(json!(auth.asc_cookies()))?;
     trust::save_to(trust_root, email, &auth.trust_cookies())?;
-    crate::reviewer::atomic_json(source, &data)?;
+    credentials::remember_identity(trust_root, email, Some(provider))?;
+    publish(source, &data)?;
     Ok(source.to_owned())
 }
-/// Generates a private reviewer session. Requires a human terminal and never reads cached secrets.
+fn save_password_after_confirmation(
+    confirmed: Result<PathBuf>,
+    email: &str,
+    password: &str,
+    store: &impl credentials::SecretStore,
+) -> Result<PathBuf> {
+    let source = confirmed?;
+    credentials::save_password(store, email, password)?;
+    Ok(source)
+}
+/// Resolve the explicit primary account or its last confirmed private host-only value.
+pub fn resolve_account(explicit: Option<&str>) -> Result<Option<String>> {
+    credentials::resolve_from(&crate::reviewer::trust_root()?, explicit)
+}
+
+/// Generates or reuses a reviewer session with remembered account and native Keychain support.
 pub async fn login(email: &str) -> Result<PathBuf> {
     login_with_options(email, false).await
 }
+
 pub async fn login_with_options(email: &str, fresh: bool) -> Result<PathBuf> {
+    login_with_provider_override(email, fresh, false).await
+}
+
+pub async fn login_with_provider_override(
+    email: &str,
+    fresh: bool,
+    allow_provider_change: bool,
+) -> Result<PathBuf> {
+    let policy = if allow_provider_change {
+        ChallengePolicy::InteractiveProviderOverride
+    } else {
+        ChallengePolicy::Interactive
+    };
     ensure!(
         io::stdin().is_terminal() && io::stderr().is_terminal(),
         "apple_login_interactive_terminal_required"
     );
-    ensure!(
-        !email.trim().is_empty() && email.len() <= 320 && !email.chars().any(char::is_control),
-        "apple_login_invalid_email"
-    );
-    ensure!(email.contains('@'), "apple_login_primary_email_required");
-    if !fresh
-        && let Some(existing) = crate::reviewer::Reusable::load().await?
-        && matches!(preflight(ASC, email, &existing).await?, Preflight::Reused)
-    {
-        eprintln!("Existing session confirmed for this Apple ID; no new login needed.");
-        return Ok(existing.source_path().to_owned());
+    let email = credentials::normalize_account(email)?;
+    if !fresh && let Some(path) = reuse_confirmed(&email, policy).await? {
+        return Ok(path);
     }
+    let store = credentials::NativeStore;
+    let password = if fresh {
+        None
+    } else {
+        credentials::load_password(&store, &email, credentials::Access::Interactive)?
+    };
+    let password = match password {
+        Some(password) => password,
+        None => read_secret("Apple ID password: ")?,
+    };
+    login_with_password(&email, &password, policy, &store).await
+}
+
+/// Host-only automatic renewal. No terminal, password prompt or verification challenge is used.
+pub async fn login_unattended(email: &str) -> Result<PathBuf> {
+    let email = credentials::normalize_account(email)?;
+    ensure!(
+        credentials::pinned_provider(&crate::reviewer::trust_root()?, &email)?.is_some(),
+        "apple_login_provider_required: run native reviewer-login once to establish the provider"
+    );
+    if let Some(path) = reuse_confirmed(&email, ChallengePolicy::Unattended).await? {
+        return Ok(path);
+    }
+    let store = credentials::NativeStore;
+    let password = credentials::load_password(&store, &email, credentials::Access::Unattended)?
+        .ok_or_else(|| anyhow::anyhow!("apple_login_secret_unavailable"))?;
+    login_with_password(&email, &password, ChallengePolicy::Unattended, &store).await
+}
+
+async fn reuse_confirmed(email: &str, policy: ChallengePolicy) -> Result<Option<PathBuf>> {
+    let trust_root = crate::reviewer::trust_root()?;
+    if let Some(existing) = crate::reviewer::Reusable::load().await?
+        && let Preflight::Reused(provider) =
+            preflight(ASC, email, &existing, &trust_root, policy).await?
+    {
+        credentials::remember_identity(&trust_root, email, Some(provider))?;
+        return Ok(Some(existing.source_path().to_owned()));
+    }
+    Ok(None)
+}
+
+async fn login_with_password(
+    email: &str,
+    password: &str,
+    policy: ChallengePolicy,
+    store: &impl credentials::SecretStore,
+) -> Result<PathBuf> {
+    ensure!(
+        !password.is_empty() && password.len() <= 4096,
+        "apple_login_password_required"
+    );
     let trust_root = crate::reviewer::trust_root()?;
     let seed = trust::load_from(&trust_root, email)?;
-    // Widget discovery uses its own empty client so no discovery cookie/header reaches auth.
+    // Widget discovery uses its own empty client; trust is never sent to /logout.
     let mut discovery = AuthClient::new()?;
     discovery.widget_key().await?;
     let widget = std::mem::take(&mut discovery.widget);
     drop(discovery);
     let mut auth = AuthClient::with_trust(widget, seed)?;
-    let password = Zeroizing::new(
-        rpassword::prompt_password("Apple ID password: ")
-            .map_err(|_| anyhow::anyhow!("apple_login_password_prompt_failed"))?,
-    );
-    ensure!(!password.is_empty(), "apple_login_password_required");
+    let source = crate::reviewer::session_source()?;
+    authenticate_and_finalize(
+        &mut auth,
+        email,
+        password,
+        policy,
+        store,
+        |auth, session, policy| {
+            finalize_confirmed(auth, session, email, &trust_root, &source, policy)
+        },
+    )
+    .await
+}
+
+async fn authenticate_and_finalize(
+    auth: &mut AuthClient,
+    email: &str,
+    password: &str,
+    policy: ChallengePolicy,
+    store: &impl credentials::SecretStore,
+    confirm: impl FnOnce(&AuthClient, &Reply, ChallengePolicy) -> Result<PathBuf>,
+) -> Result<PathBuf> {
+    let session = authenticate_with_password(auth, email, password, policy).await?;
+    let confirmed = confirm(auth, &session, policy);
+    if policy.interactive() {
+        save_password_after_confirmation(confirmed, email, password, store)
+    } else {
+        confirmed
+    }
+}
+
+fn auth_reply_success(reply: &Reply) -> Result<()> {
+    match reply.status.as_u16() {
+        401 | 403 => bail!(
+            "apple_login_credentials_rejected: run native reviewer-login --fresh to update the password"
+        ),
+        409 => bail!(
+            "apple_login_2fa_required: run native reviewer-login to complete Apple verification"
+        ),
+        412 => bail!(
+            "apple_login_account_action_required: acknowledge Apple's account requirements, then retry"
+        ),
+        _ => reply.success(),
+    }
+}
+
+/// The shared SRP flow receives a borrowed zeroized caller-owned password and explicit policy.
+async fn authenticate_with_password(
+    auth: &mut AuthClient,
+    email: &str,
+    password: &str,
+    policy: ChallengePolicy,
+) -> Result<Reply> {
     let srp = Srp::new();
     let start = json!({"a":B64.encode(srp.public.to_bytes_be()),"accountName":email,"protocols":["s2k","s2k_fo"]});
     let response = auth
@@ -802,7 +987,7 @@ pub async fn login_with_options(email: &str, fresh: bool) -> Result<PathBuf> {
             None,
         )
         .await?;
-    response.success()?;
+    auth_reply_success(&response)?;
     let challenge = response.json()?;
     let salt = B64
         .decode(challenge["salt"].as_str().unwrap_or_default())
@@ -815,12 +1000,11 @@ pub async fn login_with_options(email: &str, fresh: bool) -> Result<PathBuf> {
         .and_then(|i| u32::try_from(i).ok())
         .ok_or_else(|| anyhow::anyhow!("apple_login_invalid_iteration_count"))?;
     let encrypted = derive_password(
-        &password,
+        password,
         &salt,
         iterations,
         challenge["protocol"].as_str().unwrap_or_default(),
     )?;
-    drop(password);
     let (m1, m2) = srp.proofs(email, &encrypted, &salt, &server)?;
     drop(encrypted);
     let c = challenge["c"]
@@ -871,7 +1055,13 @@ pub async fn login_with_options(email: &str, fresh: bool) -> Result<PathBuf> {
             hc.as_deref(),
         )
         .await?;
-    accept_completion(&mut auth, response.status, async |a| a.two_factor().await).await?;
+    accept_completion(auth, response.status, policy, async |a| {
+        a.two_factor().await
+    })
+    .await?;
+    if response.status.is_success() {
+        response.success()?;
+    }
     let session = auth
         .request(
             Method::GET,
@@ -880,19 +1070,480 @@ pub async fn login_with_options(email: &str, fresh: bool) -> Result<PathBuf> {
             None,
         )
         .await?;
-    finalize_confirmed(
-        &auth,
-        &session,
-        email,
-        &trust_root,
-        &crate::reviewer::private_root()?.join("session.cookie"),
-    )
+    Ok(session)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
+    fn finalize_fixture(
+        auth: &AuthClient,
+        session: &Reply,
+        email: &str,
+        trust_root: &Path,
+        source: &Path,
+    ) -> Result<PathBuf> {
+        finalize_with_publication(
+            auth,
+            session,
+            email,
+            trust_root,
+            source,
+            ChallengePolicy::Interactive,
+            |path, value| crate::reviewer::atomic_json(path, value).map(|_| ()),
+        )
+    }
+    fn finalize_fixture_password(
+        auth: &AuthClient,
+        session: &Reply,
+        email: &str,
+        trust_root: &Path,
+        source: &Path,
+        password: &str,
+        store: &impl credentials::SecretStore,
+    ) -> Result<PathBuf> {
+        save_password_after_confirmation(
+            finalize_fixture(auth, session, email, trust_root, source),
+            email,
+            password,
+            store,
+        )
+    }
+    #[tokio::test]
+    async fn recovery_unattended_409_never_starts_a_challenge() {
+        let mut auth = AuthClient::new().unwrap();
+        let challenges = std::sync::atomic::AtomicUsize::new(0);
+        let error = accept_completion(
+            &mut auth,
+            StatusCode::CONFLICT,
+            ChallengePolicy::Unattended,
+            async |_| {
+                challenges.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                bail!("challenge_was_started")
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().starts_with("apple_login_2fa_required"));
+        assert_eq!(challenges.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+    #[test]
+    fn recovery_confirmed_identity_is_remembered_outside_session_cookie() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().join("private-trust");
+        let source = d.path().join("configured-session.cookie");
+        let mut auth = AuthClient::new().unwrap();
+        auth.record_cookie(
+            "myacinfo=synthetic-token; Domain=apple.com; Path=/; Secure",
+            &Url::parse(ASC).unwrap(),
+        );
+        let reply = Reply {
+            status: StatusCode::OK,
+            headers: HeaderMap::new(),
+            body: json!({"user":{"emailAddress":"A@X.Y"},"provider":{"providerId":123}})
+                .to_string()
+                .into_bytes(),
+        };
+        finalize_fixture(&auth, &reply, "a@x.y", &root, &source).unwrap();
+        let account: Value = serde_json::from_slice(
+            &fs::read(root.join("account.json"))
+                .expect("successful login must remember the account"),
+        )
+        .unwrap();
+        assert_eq!(account["account"], "a@x.y");
+        assert!(!fs::read_to_string(&source).unwrap().contains("a@x.y"));
+    }
+    struct RecordingStore(std::cell::RefCell<Vec<(String, Zeroizing<String>)>>);
+    impl credentials::SecretStore for RecordingStore {
+        fn supported(&self) -> bool {
+            true
+        }
+        fn get(&self, _: &str, _: credentials::Access) -> Result<Option<Zeroizing<String>>> {
+            Ok(None)
+        }
+        fn set(&self, account: &str, password: &str) -> Result<()> {
+            self.0
+                .borrow_mut()
+                .push((account.into(), Zeroizing::new(password.into())));
+            Ok(())
+        }
+    }
+    #[test]
+    fn recovery_password_is_saved_only_after_matching_final_confirmation() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().join("trust");
+        let source = d.path().join("configured.cookie");
+        let mut auth = AuthClient::new().unwrap();
+        auth.record_cookie(
+            "myacinfo=fresh; Domain=apple.com; Path=/; Secure",
+            &Url::parse(ASC).unwrap(),
+        );
+        let store = RecordingStore(std::cell::RefCell::new(Vec::new()));
+        let mut reply = Reply {
+            status: StatusCode::OK,
+            headers: HeaderMap::new(),
+            body: json!({"user":{"emailAddress":"another@x.y"},"provider":{"providerId":123}})
+                .to_string()
+                .into_bytes(),
+        };
+        assert!(
+            finalize_fixture_password(
+                &auth,
+                &reply,
+                "a@x.y",
+                &root,
+                &source,
+                "secret-sentinel",
+                &store
+            )
+            .is_err()
+        );
+        assert!(store.0.borrow().is_empty());
+        assert!(!source.exists());
+        assert!(!root.join("account.json").exists());
+        reply.body = json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":123}})
+            .to_string()
+            .into_bytes();
+        finalize_fixture_password(
+            &auth,
+            &reply,
+            "a@x.y",
+            &root,
+            &source,
+            "secret-sentinel",
+            &store,
+        )
+        .unwrap();
+        let saved = store.0.borrow();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].0, "a@x.y");
+        assert_eq!(&*saved[0].1, "secret-sentinel");
+        for path in [
+            &source,
+            &root.join("account.json"),
+            &root.join("trust.json"),
+        ] {
+            assert!(
+                !fs::read_to_string(path)
+                    .unwrap()
+                    .contains("secret-sentinel")
+            );
+        }
+    }
+    #[tokio::test]
+    async fn recovery_shared_srp_is_headless_and_never_sends_plaintext_password() {
+        use httpmock::prelude::{GET, MockServer, POST};
+        for (status, expected) in [
+            (200, None),
+            (409, Some("apple_login_2fa_required")),
+            (401, Some("apple_login_credentials_rejected")),
+            (403, Some("apple_login_credentials_rejected")),
+            (412, Some("apple_login_account_action_required")),
+        ] {
+            let server = MockServer::start();
+            let init = server.mock(|when, then| {
+                when.method(POST).path("/appleauth/auth/signin/init")
+                    .body_excludes("secret-sentinel");
+                then.json_body(json!({"salt":"c2FsdA==","b":"Ag==","iteration":1,"protocol":"s2k","c":"challenge"}));
+            });
+            let cash = server.mock(|when, then| {
+                when.method(GET).path("/appleauth/auth/signin");
+                then.status(200);
+            });
+            let complete = server.mock(|when, then| {
+                when.method(POST)
+                    .path("/appleauth/auth/signin/complete")
+                    .body_excludes("secret-sentinel")
+                    .body_includes("\"accountName\":\"a@x.y\"");
+                then.status(status).json_body(json!({}));
+            });
+            let challenge = server.mock(|when, then| {
+                when.method(GET).path("/appleauth/auth");
+                then.status(200);
+            });
+            let session = server.mock(|when, then| {
+                when.method(GET).path("/olympus/v1/session");
+                then.header(
+                    "set-cookie",
+                    "myacinfo=fresh; Domain=apple.com; Path=/; Secure",
+                )
+                .json_body(json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":123}}));
+            });
+            let mut auth = AuthClient::with_trust("widget".into(), Vec::new()).unwrap();
+            auth.test_origin = Some(server.base_url());
+            let result = authenticate_with_password(
+                &mut auth,
+                "a@x.y",
+                "secret-sentinel",
+                ChallengePolicy::Unattended,
+            )
+            .await;
+            if let Some(expected) = expected {
+                let error = result
+                    .err()
+                    .expect("user action must stop authentication")
+                    .to_string();
+                assert!(error.starts_with(expected), "{error}");
+                assert!(!error.contains("secret-sentinel"));
+                session.assert_calls(0);
+            } else {
+                let reply = result.unwrap();
+                let dir = tempfile::tempdir().unwrap();
+                finalize_fixture(
+                    &auth,
+                    &reply,
+                    "a@x.y",
+                    &dir.path().join("trust"),
+                    &dir.path().join("configured.cookie"),
+                )
+                .unwrap();
+                assert_eq!(auth.asc_cookies()[0]["value"], "fresh");
+                session.assert_calls(1);
+            }
+            init.assert_calls(1);
+            cash.assert_calls(1);
+            complete.assert_calls(1);
+            challenge.assert_calls(0);
+        }
+    }
+    #[tokio::test]
+    async fn recovery_rejected_init_stops_before_srp_complete_or_challenge() {
+        use httpmock::prelude::{GET, MockServer, POST};
+        for (status, expected) in [
+            (401, "apple_login_credentials_rejected"),
+            (403, "apple_login_credentials_rejected"),
+            (409, "apple_login_2fa_required"),
+            (412, "apple_login_account_action_required"),
+        ] {
+            let server = MockServer::start();
+            let init = server.mock(|when, then| {
+                when.method(POST).path("/appleauth/auth/signin/init");
+                then.status(status).body("secret-sentinel");
+            });
+            let later = server.mock(|when, then| {
+                when.path("/appleauth/auth/signin/complete");
+                then.status(200);
+            });
+            let challenge = server.mock(|when, then| {
+                when.method(GET).path("/appleauth/auth");
+                then.status(200);
+            });
+            let mut auth = AuthClient::with_trust("widget".into(), Vec::new()).unwrap();
+            auth.test_origin = Some(server.base_url());
+            let error = authenticate_with_password(
+                &mut auth,
+                "a@x.y",
+                "secret-sentinel",
+                ChallengePolicy::Unattended,
+            )
+            .await
+            .err()
+            .unwrap()
+            .to_string();
+            assert!(error.starts_with(expected), "{error}");
+            assert!(!error.contains("secret-sentinel"));
+            init.assert_calls(1);
+            later.assert_calls(0);
+            challenge.assert_calls(0);
+        }
+    }
+    #[test]
+    fn recovery_unattended_provider_change_preserves_every_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("trust");
+        let source = dir.path().join("configured.cookie");
+        trust::save_to(&root, "a@x.y", &[fixture_trust()]).unwrap();
+        crate::reviewer::atomic_json(
+            &root.join("account.json"),
+            &json!({"version":1,"account":"a@x.y","provider_id":123}),
+        )
+        .unwrap();
+        crate::reviewer::atomic_json(&source,&json!({"cookies":[{"name":"myacinfo","value":"previous","domain":"apple.com","path":"/"}]})).unwrap();
+        let before_account = fs::read(root.join("account.json")).unwrap();
+        let before_trust = fs::read(root.join("trust.json")).unwrap();
+        let before_source = fs::read(&source).unwrap();
+        let mut auth = AuthClient::new().unwrap();
+        auth.record_cookie(
+            "myacinfo=new; Domain=apple.com; Path=/; Secure",
+            &Url::parse(ASC).unwrap(),
+        );
+        let store = RecordingStore(std::cell::RefCell::new(Vec::new()));
+        for provider in [json!({"providerId":999}), json!({})] {
+            let reply = Reply {
+                status: StatusCode::OK,
+                headers: HeaderMap::new(),
+                body: json!({"user":{"emailAddress":"a@x.y"},"provider":provider})
+                    .to_string()
+                    .into_bytes(),
+            };
+            let result = finalize_with_publication(
+                &auth,
+                &reply,
+                "a@x.y",
+                &root,
+                &source,
+                ChallengePolicy::Unattended,
+                |p, v| crate::reviewer::atomic_json(p, v).map(|_| ()),
+            );
+            let error =
+                save_password_after_confirmation(result, "a@x.y", "secret-sentinel", &store)
+                    .unwrap_err()
+                    .to_string();
+            assert!(error.starts_with("apple_login_provider_"), "{error}");
+            assert_eq!(fs::read(root.join("account.json")).unwrap(), before_account);
+            assert_eq!(fs::read(root.join("trust.json")).unwrap(), before_trust);
+            assert_eq!(fs::read(&source).unwrap(), before_source);
+            assert!(store.0.borrow().is_empty());
+        }
+    }
+    #[tokio::test]
+    async fn recovery_unattended_preflight_provider_change_does_not_rotate_cookies() {
+        use httpmock::prelude::{GET, MockServer};
+        let server = MockServer::start();
+        let dir = tempfile::tempdir().unwrap();
+        let reusable = existing(dir.path()).await;
+        let root = dir.path().join("trust");
+        crate::reviewer::atomic_json(
+            &root.join("account.json"),
+            &json!({"version":1,"account":"a@x.y","provider_id":123}),
+        )
+        .unwrap();
+        server.mock(|when, then| {
+            when.method(GET).path("/olympus/v1/session");
+            then.header(
+                "set-cookie",
+                "myacinfo=wrong-provider; Domain=apple.com; Path=/",
+            )
+            .json_body(json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":999}}));
+        });
+        let error = preflight(
+            &server.base_url(),
+            "a@x.y",
+            &reusable,
+            &root,
+            ChallengePolicy::Unattended,
+        )
+        .await
+        .err()
+        .expect("provider drift must require a human")
+        .to_string();
+        assert!(error.starts_with("apple_login_provider_changed"), "{error}");
+        assert!(!dir.path().join("session.state.json").exists());
+        assert_eq!(reusable.cookie_header(), "myacinfo=old");
+    }
+    #[test]
+    fn recovery_provider_pin_requires_enrollment_and_explicit_human_override() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("trust");
+        let body = json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":123}});
+        assert!(
+            confirmed_provider(&root, "a@x.y", &body, ChallengePolicy::Unattended)
+                .unwrap_err()
+                .to_string()
+                .starts_with("apple_login_provider_required")
+        );
+        assert_eq!(
+            confirmed_provider(&root, "a@x.y", &body, ChallengePolicy::Interactive).unwrap(),
+            123
+        );
+        credentials::remember_identity(&root, "a@x.y", Some(123)).unwrap();
+        let body = json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":456}});
+        assert!(
+            confirmed_provider(&root, "a@x.y", &body, ChallengePolicy::Interactive)
+                .unwrap_err()
+                .to_string()
+                .starts_with("apple_login_provider_changed")
+        );
+        assert!(confirmed_provider(&root, "a@x.y", &body, ChallengePolicy::Unattended).is_err());
+        assert_eq!(
+            confirmed_provider(
+                &root,
+                "a@x.y",
+                &body,
+                ChallengePolicy::InteractiveProviderOverride
+            )
+            .unwrap(),
+            456
+        );
+        assert_eq!(
+            credentials::pinned_provider(&root, "other@x.y").unwrap(),
+            None
+        );
+        for provider in [
+            json!({"providerId":0}),
+            json!({"providerId":-1}),
+            json!({"providerId":"123"}),
+            json!({}),
+        ] {
+            let body = json!({"provider":provider});
+            assert!(
+                confirmed_provider(
+                    &root,
+                    "a@x.y",
+                    &body,
+                    ChallengePolicy::InteractiveProviderOverride
+                )
+                .is_err()
+            );
+        }
+    }
+    #[tokio::test]
+    async fn recovery_unattended_success_never_writes_the_secret_store() {
+        use httpmock::prelude::{GET, MockServer, POST};
+        let server = MockServer::start();
+        server.mock(|when,then| { when.method(POST).path("/appleauth/auth/signin/init").body_excludes("secret-sentinel"); then.json_body(json!({"salt":"c2FsdA==","b":"Ag==","iteration":1,"protocol":"s2k","c":"challenge"})); });
+        server.mock(|when, then| {
+            when.method(GET).path("/appleauth/auth/signin");
+            then.status(200);
+        });
+        server.mock(|when, then| {
+            when.method(POST)
+                .path("/appleauth/auth/signin/complete")
+                .body_excludes("secret-sentinel");
+            then.status(200).json_body(json!({}));
+        });
+        server.mock(|when, then| {
+            when.method(GET).path("/olympus/v1/session");
+            then.header(
+                "set-cookie",
+                "myacinfo=renewed; Domain=apple.com; Path=/; Secure",
+            )
+            .json_body(json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":123}}));
+        });
+        let challenge = server.mock(|when, then| {
+            when.path("/appleauth/auth/verify");
+            then.status(200);
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("trust");
+        let source = dir.path().join("configured.cookie");
+        credentials::remember_identity(&root, "a@x.y", Some(123)).unwrap();
+        let store = RecordingStore(std::cell::RefCell::new(Vec::new()));
+        let mut auth = AuthClient::with_trust("widget".into(), Vec::new()).unwrap();
+        auth.test_origin = Some(server.base_url());
+        let result = authenticate_and_finalize(
+            &mut auth,
+            "a@x.y",
+            "secret-sentinel",
+            ChallengePolicy::Unattended,
+            &store,
+            |auth, session, policy| {
+                finalize_with_publication(auth, session, "a@x.y", &root, &source, policy, |p, v| {
+                    crate::reviewer::atomic_json(p, v).map(|_| ())
+                })
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, source);
+        assert!(fs::read_to_string(&source).unwrap().contains("renewed"));
+        assert!(
+            store.0.borrow().is_empty(),
+            "an unattended renewal must never invoke SecretStore::set"
+        );
+        challenge.assert_calls(0);
+    }
     #[test]
     fn apple_password_derivation_fixtures_and_protocol_bounds() {
         let salt = hex::decode("00112233445566778899aabbccddeeff").unwrap();
@@ -1248,7 +1899,9 @@ mod tests {
                         "set-cookie",
                         "myacinfo=active; Domain=apple.com; Path=/; Secure",
                     )
-                    .json_body(json!({"user":{"emailAddress":"a@x.y"}}));
+                    .json_body(
+                        json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":123}}),
+                    );
             });
             let mut auth = AuthClient::with_trust("fixture".into(), vec![fixture_trust()]).unwrap();
             auth.test_origin = Some(server.base_url());
@@ -1261,11 +1914,16 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            accept_completion(&mut auth, r.status, async |a| {
-                a.request(Method::GET, &format!("{AUTH}/verify"), None, None)
-                    .await?
-                    .success()
-            })
+            accept_completion(
+                &mut auth,
+                r.status,
+                ChallengePolicy::Interactive,
+                async |a| {
+                    a.request(Method::GET, &format!("{AUTH}/verify"), None, None)
+                        .await?
+                        .success()
+                },
+            )
             .await
             .unwrap();
             let r = auth
@@ -1280,7 +1938,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let store = dir.path().join("login-trust");
             let source = dir.path().join("session.cookie");
-            finalize_confirmed(&auth, &r, "a@x.y", &store, &source).unwrap();
+            finalize_fixture(&auth, &r, "a@x.y", &store, &source).unwrap();
             assert_eq!(
                 trust::load_from(&store, "a@x.y").unwrap()[0].value,
                 "rotated"
@@ -1336,7 +1994,8 @@ mod tests {
         for (status, body) in [
             (
                 StatusCode::OK,
-                json!({"user":{"emailAddress":"other@x.y"}}).to_string(),
+                json!({"user":{"emailAddress":"other@x.y"},"provider":{"providerId":123}})
+                    .to_string(),
             ),
             (StatusCode::OK, json!({"provider":{}}).to_string()),
             (StatusCode::UNAUTHORIZED, "{}".into()),
@@ -1347,7 +2006,7 @@ mod tests {
                 headers: HeaderMap::new(),
                 body: body.into_bytes(),
             };
-            assert!(finalize_confirmed(&auth, &r, "a@x.y", &store, &source).is_err());
+            assert!(finalize_fixture(&auth, &r, "a@x.y", &store, &source).is_err());
             assert_eq!(std::fs::read(&source).unwrap(), before_source);
             assert_eq!(std::fs::read(trust::path_in(&store)).unwrap(), before_trust);
             assert_eq!(std::fs::read(&overlay).unwrap(), before_overlay);
@@ -1356,11 +2015,11 @@ mod tests {
         let r = Reply {
             status: StatusCode::OK,
             headers: HeaderMap::new(),
-            body: json!({"user":{"emailAddress":"a@x.y"}})
+            body: json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":123}})
                 .to_string()
                 .into_bytes(),
         };
-        assert!(finalize_confirmed(&auth, &r, "a@x.y", &store, &source).is_err());
+        assert!(finalize_fixture(&auth, &r, "a@x.y", &store, &source).is_err());
         assert_eq!(std::fs::read(trust::path_in(&store)).unwrap(), before_trust);
     }
     #[tokio::test]
@@ -1385,13 +2044,19 @@ mod tests {
             when.method(GET)
                 .path("/olympus/v1/session")
                 .header("cookie", "myacinfo=rotated");
-            then.json_body(json!({"user":{"emailAddress":"a@x.y"}}));
+            then.json_body(json!({"user":{"emailAddress":"a@x.y"},"provider":{"providerId":123}}));
         });
         assert!(matches!(
-            preflight(&server.base_url(), "a@x.y", &reusable)
-                .await
-                .unwrap(),
-            Preflight::Reused
+            preflight(
+                &server.base_url(),
+                "a@x.y",
+                &reusable,
+                reusable.source_path().parent().unwrap(),
+                ChallengePolicy::Interactive
+            )
+            .await
+            .unwrap(),
+            Preflight::Reused(_)
         ));
         m.assert_calls(1);
         crate::reviewer::atomic_json(&source,&json!({"cookies":[{"name":"myacinfo","value":"new-generation","domain":"apple.com","path":"/"}]})).unwrap();
@@ -1436,11 +2101,11 @@ mod tests {
     #[test]
     fn identity_requires_matching_email_not_provider() {
         assert!(identity_matches(
-            &json!({"user":{"emailAddress":" A@X.Y "}}),
+            &json!({"user":{"emailAddress":" A@X.Y "},"provider":{"providerId":123}}),
             "a@x.y"
         ));
         assert!(!identity_matches(
-            &json!({"user":{"emailAddress":"b@x.y"}}),
+            &json!({"user":{"emailAddress":"b@x.y"},"provider":{"providerId":123}}),
             "a@x.y"
         ));
         assert!(!identity_matches(
@@ -1471,13 +2136,19 @@ mod tests {
                 .path("/olympus/v1/session")
                 .header("cookie", "myacinfo=old");
             then.header("set-cookie", "myacinfo=rotated; Domain=apple.com; Path=/")
-                .json_body(json!({"user":{"emailAddress":"A@x.y"}}));
+                .json_body(json!({"user":{"emailAddress":"A@x.y"},"provider":{"providerId":123}}));
         });
         assert!(matches!(
-            preflight(&server.base_url(), "a@x.y", &reusable)
-                .await
-                .unwrap(),
-            Preflight::Reused
+            preflight(
+                &server.base_url(),
+                "a@x.y",
+                &reusable,
+                reusable.source_path().parent().unwrap(),
+                ChallengePolicy::Interactive
+            )
+            .await
+            .unwrap(),
+            Preflight::Reused(_)
         ));
         m.assert();
         let reloaded = crate::reviewer::Reusable::from_paths(
@@ -1496,7 +2167,7 @@ mod tests {
             (401, json!({}), Some(true)),
             (
                 200,
-                json!({"user":{"emailAddress":"other@x.y"}}),
+                json!({"user":{"emailAddress":"other@x.y"},"provider":{"providerId":123}}),
                 Some(true),
             ),
             (200, json!({"provider":{"name":"p"}}), Some(true)),
@@ -1510,7 +2181,14 @@ mod tests {
                 when.method(GET).path("/olympus/v1/session");
                 then.status(status).json_body(body.clone());
             });
-            let result = preflight(&server.base_url(), "a@x.y", &reusable).await;
+            let result = preflight(
+                &server.base_url(),
+                "a@x.y",
+                &reusable,
+                reusable.source_path().parent().unwrap(),
+                ChallengePolicy::Interactive,
+            )
+            .await;
             match fresh {
                 Some(_) => assert!(matches!(result.unwrap(), Preflight::Fresh), "{status}"),
                 None => assert!(result.is_err(), "{status}"),
@@ -1526,9 +2204,15 @@ mod tests {
             then.status(200).body("not json");
         });
         assert!(
-            preflight(&server.base_url(), "a@x.y", &reusable)
-                .await
-                .is_err()
+            preflight(
+                &server.base_url(),
+                "a@x.y",
+                &reusable,
+                reusable.source_path().parent().unwrap(),
+                ChallengePolicy::Interactive
+            )
+            .await
+            .is_err()
         );
     }
     #[test]

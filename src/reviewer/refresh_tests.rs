@@ -1,6 +1,48 @@
 use super::*;
 use httpmock::prelude::{GET, MockServer};
 
+#[cfg(unix)]
+#[tokio::test]
+async fn dangling_session_lock_does_not_create_an_outside_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("shared");
+    ensure_root(&root).unwrap();
+    let source = dir.path().join("credentials/session.cookie");
+    atomic_json(
+        &source,
+        &json!({"cookies":[{"name":"session","value":"fixture","domain":"apple.com","path":"/"}]}),
+    )
+    .unwrap();
+    let outside = dir.path().join("must-not-be-created");
+    std::os::unix::fs::symlink(&outside, root.join(".session.lock")).unwrap();
+    assert!(session::load(source, root).await.is_err());
+    assert!(
+        !outside.exists(),
+        "opening a dangling shared-state symlink must not create its target"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn private_state_io_refuses_intermediate_symlinks() {
+    let dir = tempfile::tempdir().unwrap();
+    let shared = dir.path().join("shared");
+    let outside = dir.path().join("outside/nested");
+    fs::create_dir_all(&shared).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    fs::set_permissions(&outside, fs::Permissions::from_mode(0o755)).unwrap();
+    std::os::unix::fs::symlink(outside.parent().unwrap(), shared.join("link")).unwrap();
+    let path = shared.join("link/nested/status.json");
+    assert!(atomic_json(&path, &json!({"fixture":true})).is_err());
+    assert!(!outside.join("status.json").exists());
+    assert_eq!(
+        fs::metadata(&outside).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    atomic_json(&outside.join("existing.json"), &json!({"fixture":true})).unwrap();
+    assert!(private_read(&shared.join("link/nested/existing.json"), 4096).is_err());
+}
+
 #[tokio::test]
 async fn refresh_survives_client_restart_without_changing_source() {
     let server = MockServer::start();

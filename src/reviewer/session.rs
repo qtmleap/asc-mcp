@@ -41,29 +41,7 @@ impl Drop for Lock {
     }
 }
 fn lock(root: &Path) -> Result<Lock> {
-    ensure_root(root)?;
-    let path = root.join(".session.lock");
-    if path.exists() && !fs::symlink_metadata(&path)?.is_file() {
-        bail!("reviewer_private_file_required");
-    }
-    let mut options = OpenOptions::new();
-    options.read(true).write(true).create(true).truncate(false);
-    #[cfg(unix)]
-    options.mode(0o600);
-    let file = options
-        .open(&path)
-        .map_err(|_| anyhow::anyhow!("reviewer_session_lock_unwritable"))?;
-    let meta = fs::symlink_metadata(&path)?;
-    if !meta.is_file() {
-        bail!("reviewer_private_file_required");
-    }
-    #[cfg(unix)]
-    if meta.permissions().mode() & 0o077 != 0
-        || file.metadata()?.ino() != meta.ino()
-        || file.metadata()?.dev() != meta.dev()
-    {
-        bail!("reviewer_session_lock_permissions");
-    }
+    let file = super::open_private_lock(root, ".session.lock")?;
     let start = Instant::now();
     loop {
         match fs2::FileExt::try_lock_exclusive(&file) {
@@ -78,6 +56,13 @@ fn lock(root: &Path) -> Result<Lock> {
             Err(_) => bail!("reviewer_session_busy"),
         }
     }
+}
+
+/// Publish a confirmed login under the same lock as response-cookie rotation.
+pub(super) fn replace(source: &Path, root: &Path, data: &Value) -> Result<()> {
+    let _lock = lock(root)?;
+    atomic_json(source, data)?;
+    Ok(())
 }
 fn read(source: &Path, root: &Path) -> Result<Snapshot> {
     // Source removal revokes this client; never silently continue with an old overlay.
@@ -142,8 +127,6 @@ pub(super) async fn persist(
             bail!("reviewer_private_file_too_large");
         }
         atomic_json(&root.join("session.state.json"), &value)?;
-        #[cfg(unix)]
-        fs::File::open(&root)?.sync_all()?;
         Ok(())
     })
     .await
