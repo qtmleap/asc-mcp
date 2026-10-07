@@ -7,14 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       test-os:
-        description: 'JSON array of self-hosted OS labels, e.g. ["Linux","macOS","Windows"]'
+        description: 'JSON array of self-hosted runner labels, e.g. ["Linux","macos-latest","Windows"]'
         type: string
-        default: '["Linux"]'
+        default: '["Linux","macos-latest"]'
   workflow_call:
     inputs:
       test-os:
         type: string
-        default: '["Linux"]'
+        default: '["Linux","macos-latest"]'
       skip-docker:
         type: boolean
         default: false
@@ -28,8 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.test-os || '["Linux"]') }}
-    # Linux uses the docker-capable X64 fleet; other OS values select a native self-hosted runner by label.
+        os: ${{ fromJSON(inputs.test-os || '["Linux","macos-latest"]') }}
+    # Linux uses the docker-capable X64 fleet; other values select a native self-hosted runner by label.
     runs-on: ${{ matrix.os == 'Linux' && fromJSON('["self-hosted","Linux","X64","docker"]') || fromJSON(format('["self-hosted","{0}"]', matrix.os)) }}
     timeout-minutes: 20
     steps:

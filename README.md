@@ -274,10 +274,10 @@ unread message cannot be marked seen accidentally. Details:
 
 - `.github/workflows/integration.yaml` validates development branches and pull
   requests: formatting, strict Clippy, tests, release builds and CLI smoke
-  on the self-hosted Linux X64 Docker runner by default, plus a distroless Docker
-  build and Compose validation. Manual runs accept `test-os`, for example
-  `["Linux","macOS","Windows"]`, once native macOS/Windows self-hosted runners
-  with matching labels are registered.
+  on self-hosted Linux X64 Docker and `macos-latest` runners by default, plus a
+  distroless Docker build and Compose validation. Manual runs accept `test-os`,
+  for example `["Linux","macos-latest","Windows"]`; Windows checks require a
+  matching self-hosted Windows runner.
 - `.github/workflows/deployment.yaml` runs on `master` pushes, `v*` tags
   and manual dispatch. It reuses Linux integration checks before publishing.
   The self-hosted Linux X64 Docker fleet builds the amd64 image natively and the
@@ -288,9 +288,8 @@ unread message cannot be marked seen accidentally. Details:
   publish release tags. Release tags must match the version in `Cargo.toml`.
 - `.github/workflows/release.yml` packages native OS binaries for version tags;
   manual snapshot runs only upload workflow artifacts. Its Linux, macOS and
-  Windows jobs target self-hosted runners by OS label; native macOS and Windows
-  runners are required but not currently registered, so those jobs will wait
-  until they exist.
+  Windows jobs target native self-hosted runners; macOS selects `macos-latest`,
+  and Windows requires a matching Windows runner.
 
 GHCR authentication uses GitHub Actions' `GITHUB_TOKEN` with `packages: write`;
 no Apple API keys, Apple ID sessions or signing credentials are needed for CI/CD.

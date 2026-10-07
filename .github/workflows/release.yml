@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [Linux, macOS, Windows]
+        os: [Linux, macos-latest, Windows]
     runs-on: [self-hosted, "${{ matrix.os }}"]
     timeout-minutes: 25
     steps:
