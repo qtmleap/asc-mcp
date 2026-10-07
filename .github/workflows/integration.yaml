@@ -5,11 +5,16 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      test-os:
+        description: 'JSON array of self-hosted OS labels, e.g. ["Linux","macOS","Windows"]'
+        type: string
+        default: '["Linux"]'
   workflow_call:
     inputs:
       test-os:
         type: string
-        default: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+        default: '["Linux"]'
       skip-docker:
         type: boolean
         default: false
@@ -23,8 +28,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.test-os || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
-    runs-on: ${{ matrix.os }}
+        os: ${{ fromJSON(inputs.test-os || '["Linux"]') }}
+    # Linux uses the docker-capable X64 fleet; other OS values select a native self-hosted runner by label.
+    runs-on: ${{ matrix.os == 'Linux' && fromJSON('["self-hosted","Linux","X64","docker"]') || fromJSON(format('["self-hosted","{0}"]', matrix.os)) }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -45,7 +51,7 @@ jobs:
 
   docker:
     if: ${{ !inputs.skip-docker }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, docker]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -61,14 +67,17 @@ jobs:
         run: docker run --rm asc-mcp-ci:latest version
       - name: Default HTTP sidecar smoke
         run: |
-          sidecar_id=$(docker run -d -e ASC_MCP_AUTH_TOKENS=ci-sidecar-token -p 127.0.0.1::8080 asc-mcp-ci:latest)
+          sidecar_id=$(docker run -d --network none -e ASC_MCP_AUTH_TOKENS=ci-sidecar-token asc-mcp-ci:latest)
           trap 'docker rm -f "$sidecar_id" >/dev/null 2>&1 || true' EXIT
-          sidecar_port=$(docker port "$sidecar_id" 8080/tcp | sed 's/.*://')
-          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 --max-time 2 "http://127.0.0.1:$sidecar_port/healthz"
-          http_status=$(curl --silent --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' --data '{}' "http://127.0.0.1:$sidecar_port/mcp")
+          # dind has its own loopback; check HTTP inside the sidecar's network namespace.
+          sidecar_curl() {
+            docker run --rm --network "container:$sidecar_id" curlimages/curl:8.22.0 "$@"
+          }
+          sidecar_curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 --max-time 2 http://127.0.0.1:8080/healthz
+          http_status=$(sidecar_curl --silent --output /dev/null --write-out '%{http_code}' -H 'Content-Type: application/json' --data '{}' http://127.0.0.1:8080/mcp)
           test "$http_status" = 401
-          curl --fail --silent --show-error -H 'Authorization: Bearer ci-sidecar-token' -H 'Content-Type: application/json' \
+          sidecar_curl --fail --silent --show-error -H 'Authorization: Bearer ci-sidecar-token' -H 'Content-Type: application/json' \
             --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci-sidecar-smoke","version":"1"}}}' \
-            "http://127.0.0.1:$sidecar_port/mcp" | python3 -c 'import json,sys; response=json.load(sys.stdin); assert response["result"]["serverInfo"]["name"] == "asc-mcp"'
+            http://127.0.0.1:8080/mcp | python3 -c 'import json,sys; response=json.load(sys.stdin); assert response["result"]["serverInfo"]["name"] == "asc-mcp"'
       - name: Compose configuration
         run: ./script/docker/compose.sh standalone config -q
