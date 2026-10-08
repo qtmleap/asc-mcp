@@ -87,7 +87,7 @@ validated.
 
 ## Review status tools
 
-Five session-only, read-only tools sit beside the five above (ten reviewer tools
+Five session-only, read-only tools sit beside the five above (fourteen reviewer tools with the four reply/recovery tools below
 in total). They reuse the same HTTP client, redaction, same-origin/exact-path
 pagination (max 20 pages, 8 MiB). They never write `state.json`/`messages.json`,
 take the monitor lock, log in, switch teams or send a POST. Live verification
@@ -160,3 +160,123 @@ Unit and local HTTP tests cover safe YAML, expiry and permissions, redirects and
 auth errors, response redaction, pagination safety/cycles, session reload,
 positive actor detection, repeated pending updates, stale snapshot rejection,
 private file modes, concurrency exclusion, and one-attempt uncertain POSTs.
+
+## Modern reply tools
+
+`reply_app_review_message` (`app_id`, `review_submission_id`, `thread_id`,
+`expected_apple_message_id`, `message`) and `get_app_review_reply_status` (`app_id`,
+`review_submission_id`, `thread_id`) are always listed, so a session-only server exposes
+fourteen reviewer tools (the legacy `reply_reviewer_message` is extra and off by default).
+
+Flow: take the per-thread private lock (`.reply-<thread>.lock`, non-blocking; a second
+caller gets `reviewer_reply_busy`) → read the durable record (`reply-<thread>.json`, mode
+600, body hash only) → verify app→submission and submission→thread membership,
+`canDeveloperAddNote` and an ACTIVE thread or UNRESOLVED_ISSUES submission, known
+`APPLE`/`USER`/`API_KEY`/`XCODE_CLOUD` actors and valid dates, newest Apple message equals the expected id,
+no duplicate developer body (CRLF/outer whitespace folded) and no existing draft (only
+`data: null` proves absence; errors are not absence) → write the `intent` record → `POST`
+draft (`messageBody` raw string, `resolutionCenterThread` relationship) → record
+`draft_created` → GET the draft and re-check context, leaving the draft unsent on any
+difference → record `send_attempted` → `POST` message with `createFromDraftMessage` →
+read back. Headers for these writes: `X-Csrf-Itc: [asc-ui]`, `Accept`/`Content-Type:
+application/vnd.api+json` (legacy transport unchanged). POSTs are never replayed.
+
+Session binding: each reply, resume, reset or status call pins the authentication source
+generation once. The `/olympus/v1/session` ownership proof, every preflight GET, the draft
+POST and the message POST use cookies from that generation only; cookie rotation through
+the private overlay within the same generation is allowed. If the source is replaced (for
+example account A → B), the next request fails locally with `reviewer_session_changed`
+before anything is sent, and the generation is re-checked immediately before each POST.
+These pinned requests do not use the 401 renewal wait/replay; the regular read tools keep it.
+
+Integrity: response bodies used for draft/message body hashes, draft identity and creator
+email checks are compared unredacted, in memory only. Public tool results contain only
+fixed codes and IDs; an ID that equals or contains a session cookie value is refused.
+Pagination keeps the original `filter[...]` scope: a `links.next` that changes, duplicates
+or adds a filter is refused (`reviewer_unsafe_pagination_url`), and a missing filter is
+re-added with its original value, so a page cannot widen thread membership.
+
+Records in any state other than `delivered` or explicitly `reset` block every later send on the thread, even a
+different body, until inspected by a person; nothing deletes or patches drafts or
+records automatically. Messages are limited to 4000 UTF-16 units (matching the observed
+web reply box maxLength, not a public API specification),
+non-blank, no control characters. Errors expose fixed codes only, never response bodies,
+message text or cookies.
+
+Live verification on 2026-10-08: one existing draft was explicitly resumed once;
+the status tool confirmed a new developer message with the matching raw body. The send
+response was non-JSON, so the send call conservatively returned `delivery_unknown`;
+a GET-only status check established delivery without retrying the POST.
+
+Limitations: the request shapes come from the web frontend bundle
+<https://appstoreconnect.apple.com/access/m-appstore/static/js/main.a52d4a9ea996a295dcaa.js>
+(a versioned asset that Apple may replace) and may change. If Apple normalises message HTML the read-back can stay `delivery_unknown` even
+though the message was sent; check App Store Connect before anything else. No attachments.
+
+
+### Recovery without an automatic resend
+
+`get_app_review_reply_status` reports `not_attempted` when no attempt exists or it was
+explicitly reset, `not_sent` for `intent`/`draft_created`/`draft_pending_validation`/`draft_rejected`, and
+`delivery_unknown` for an unconfirmed message-send attempt. Both unfinished states remain
+blocked. A draft POST receiving a definite HTTP 4xx (excluding 408) is saved as
+`draft_rejected`; transport errors and 5xx remain uncertain. POSTs are never retried.
+
+`reset_rejected_app_review_reply` takes `app_id`, `review_submission_id`, and `thread_id`.
+This explicit call can only reset a `draft_rejected` record without draft/message IDs.
+It checks membership, replyable state, the absence of a remote draft and the absence of
+a matching developer message with GETs, then atomically changes the local phase to
+`reset`. It never sends, patches or deletes anything on Apple. A subsequent reply is a
+separate explicit call and repeats the complete preflight. Unknown sends and interrupted
+draft creations cannot be reset this way.
+
+For unknown outcomes, first read messages and the status; never start another send or
+remove the local record just because a request timed out. If a matching developer message
+is read back, status records confirmed delivery. For a draft left unsent, inspect it in
+App Store Connect and decide whether to keep or discard it. Any manual recovery of a
+local record requires stopping only the asc-mcp service (not the entire LocalGPT stack),
+confirming no reply is running, and preserving a backup of `reply-<thread>.json` under
+the configured private state root. The default root is `Library/Application Support/ASC MCP`
+under the service HOME; an existing legacy root or `ASC_REVIEW_STATE_ROOT` may override it.
+Do not edit or remove authentication cookies, trust files or the monitor acknowledgement
+state. There is no automatic unblock for an uncertain send.
+
+Confirmed delivery requires a new, known developer-authored message and matching body
+(after CRLF/outer-whitespace normalization), and the returned message ID when available.
+Server timestamps are used to choose the newest Apple message, but delivery does not
+compare Apple's clock with the host's clock. A returned ID alone does not verify that the
+body is the one requested; a mismatch remains unconfirmed and is not resent.
+
+
+### Explicitly resume a verified unsent draft
+
+`resume_unsent_app_review_reply` takes the original five reply arguments plus an explicit
+`draft_id`. It accepts only `intent`, `draft_created`, or `draft_pending_validation`
+records with no message-send attempt. It validates the unchanged app/submission/thread,
+expected Apple message, body hash, and message-ID set; a known draft ID must match.
+It reads the thread's draft (never lists or selects a newest draft), verifies its resource
+ID/type/body and empty attachments, and compares its USER creator email with the current
+session email in memory. Emails are neither returned nor saved. The draft must be created
+within the original intent's window (5-second clock tolerance, maximum 24-hour age), and
+not in the future beyond that tolerance. Missing creator/time information fails closed.
+An identical draft made by the same account in the web UI cannot be distinguished from
+this intent; the explicit caller-supplied ID confirms which verified draft to send.
+
+After proof, the ID is saved and the same draft/context checks and sender used by the
+normal reply tool run. `send_attempted` is persisted before the one message POST, so a
+crash or unknown outcome cannot be resumed. Existing drafts are never patched or deleted.
+A pending status returns only an ID and verification flag, not draft text or email.
+Successful Iris POSTs with empty bodies preserve status headers; a create without an ID
+stays `draft_pending_validation` until explicit resume. Non-empty invalid JSON and HTTP
+failures remain errors. Optional local diagnostics contain only a numeric HTTP status
+and fixed error kind, never response snippets or header values.
+
+On 2026-10-08, a live draft was created and read back with the requested body, USER creator,
+and empty attachments. Its create response could not be confirmed by the caller. This is
+not proof of message delivery; that requires a separate verified read-back after send.
+
+
+A pending intent older than 24 hours cannot use the resume tool. It remains blocked for
+manual inspection/recovery; this age limit never automatically clears a record or sends
+anything. The original caller must retain the message body to supply the unchanged
+request when resuming; local records deliberately retain only its hash.

@@ -430,7 +430,7 @@ mod review_status_tests {
     }
 
     #[tokio::test]
-    async fn reviewer_only_server_exposes_exactly_ten_review_tools() {
+    async fn reviewer_only_server_exposes_exactly_fourteen_review_tools() {
         let mock = MockServer::start();
         let dir = tempfile::tempdir().unwrap();
         let server = Server {
@@ -445,7 +445,7 @@ mod review_status_tests {
             .await
             .unwrap();
         let tools = response["result"]["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 10);
+        assert_eq!(tools.len(), 14);
         for name in NEW {
             assert!(tools.iter().any(|t| t["name"] == name), "{name}");
         }

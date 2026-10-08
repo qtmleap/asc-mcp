@@ -745,7 +745,7 @@ mod tests {
                 when.method(httpmock::Method::POST)
                     .path("/v1/reviewSubmissions");
                 then.status(201)
-                    .delay(std::time::Duration::from_millis(150))
+                    .delay(std::time::Duration::from_millis(400))
                     .json_body(json!({"data":{"id":"sub1"}}));
             })
             .await;
@@ -756,7 +756,7 @@ mod tests {
             "/v1/reviewSubmissions",
             vec![],
             Some(json!({})),
-            std::time::Duration::from_millis(40),
+            std::time::Duration::from_millis(100),
         )
         .await
         .unwrap_err();
