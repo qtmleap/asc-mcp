@@ -196,7 +196,13 @@ impl Server {
                         json!({"content":[{"type":"text","text":serde_json::to_string(&data).unwrap_or_default()}],"structuredContent":if data.is_object(){data}else{json!({"data":data})},"isError":false})
                     }
                     Ok(Err(e)) => {
-                        json!({"content":[{"type":"text","text":e.to_string()}],"isError":true})
+                        let (text, structured) = crate::api_error::public_error(&e);
+                        let mut error =
+                            json!({"content":[{"type":"text","text":text}],"isError":true});
+                        if let Some(data) = structured {
+                            error["structuredContent"] = data;
+                        }
+                        error
                     }
                     Err(_) => {
                         json!({"content":[{"type":"text","text":"Tool call timed out; verify state before retrying any write"}],"isError":true})
@@ -304,7 +310,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(value["result"]["tools"].as_array().unwrap().len(), 356);
+        assert_eq!(value["result"]["tools"].as_array().unwrap().len(), 359);
         assert!(
             s.dispatch(
                 &json!({"jsonrpc":"2.0","method":"notifications/initialized"}),

@@ -8,6 +8,14 @@ available; runtime validation reports legacy arguments which had no implementati
 
 ## Offline compatibility evidence
 
+The 356-tool Go snapshot and request probes remain unchanged. Three native
+additions are maintained separately in `data/native_tools.json` and
+`data/native_request_recipes.json`: `get_app_store_version_build`,
+`set_app_store_version_build`, and `create_screenshot_set`. They use the bundled
+Apple OpenAPI build relationship and screenshot-set schemas, with Rust HTTP and
+protocol regression tests. The runtime public catalogue therefore has 359 tools;
+the original Go evidence still covers exactly 356.
+
 `migration/export.sh`, run in a separate checkout of the recorded Go revision, installs a temporary, build-tagged capture client and runs
 the original Go handlers through an in-memory HTTP transport. That transport
 always returns HTTP 400 and never opens a socket. The temporary Go API file is

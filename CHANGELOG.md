@@ -12,6 +12,8 @@ under `## [Unreleased]` until a release is cut.
 ## [Unreleased]
 
 ### Fixed
+- Preserve sanitized Apple API error details and the completed stage of a failed
+  review submission without replaying writes or dropping the underlying cause.
 - Use the generic `ASC MCP` private directory with whole-root legacy fallback; require an explicit reviewer monitor app ID instead of selecting Interceptor. Docker login preserves the service state-root selection.
 - Reuse verified reviewer sessions and preserve account-bound login cookies for
   interactive reauthentication, with isolated Docker storage and a `--fresh` recovery option.
@@ -23,6 +25,8 @@ under `## [Unreleased]` until a release is cut.
   redirects without exposing response bodies, cookies or redirect destinations.
 
 ### Added
+- Build selection/read-back and screenshot-set creation tools for App Store
+  submission preparation, backed by Apple's public API.
 - Five read-only, session-only App Review status tools (`list_review_apps`,
   `get_app_review_status`, `get_all_app_review_statuses`,
   `get_app_rejection_details`, `get_review_connection_status`), bringing the

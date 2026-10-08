@@ -1,0 +1,113 @@
+[
+  {
+    "name": "get_app_store_version_build",
+    "description": "Read the related build selected for an App Store version.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "version_id": {
+          "type": "string",
+          "description": "The App Store version ID"
+        }
+      },
+      "required": [
+        "version_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "set_app_store_version_build",
+    "description": "Select an existing build for an App Store version. A 204 success is returned as status:success. Read get_app_store_version_build to verify the selection before retrying an uncertain write.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "version_id": {
+          "type": "string",
+          "description": "The App Store version ID"
+        },
+        "build_id": {
+          "type": "string",
+          "description": "The processed App Store eligible build ID; not the build number"
+        }
+      },
+      "required": [
+        "version_id",
+        "build_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "create_screenshot_set",
+    "description": "Create an App Store screenshot set for a version localization and display type. Use list_screenshot_sets first to avoid duplicates, then upload_app_screenshot for the image.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "localization_id": {
+          "type": "string",
+          "description": "The App Store version localization ID, not the version ID"
+        },
+        "screenshot_display_type": {
+          "type": "string",
+          "enum": [
+            "APP_IPHONE_67",
+            "APP_IPHONE_61",
+            "APP_IPHONE_65",
+            "APP_IPHONE_58",
+            "APP_IPHONE_55",
+            "APP_IPHONE_47",
+            "APP_IPHONE_40",
+            "APP_IPHONE_35",
+            "APP_IPAD_PRO_3GEN_129",
+            "APP_IPAD_PRO_3GEN_11",
+            "APP_IPAD_PRO_129",
+            "APP_IPAD_105",
+            "APP_IPAD_97",
+            "APP_DESKTOP",
+            "APP_WATCH_ULTRA",
+            "APP_WATCH_SERIES_10",
+            "APP_WATCH_SERIES_7",
+            "APP_WATCH_SERIES_4",
+            "APP_WATCH_SERIES_3",
+            "APP_APPLE_TV",
+            "APP_APPLE_VISION_PRO",
+            "IMESSAGE_APP_IPHONE_67",
+            "IMESSAGE_APP_IPHONE_61",
+            "IMESSAGE_APP_IPHONE_65",
+            "IMESSAGE_APP_IPHONE_58",
+            "IMESSAGE_APP_IPHONE_55",
+            "IMESSAGE_APP_IPHONE_47",
+            "IMESSAGE_APP_IPHONE_40",
+            "IMESSAGE_APP_IPAD_PRO_3GEN_129",
+            "IMESSAGE_APP_IPAD_PRO_3GEN_11",
+            "IMESSAGE_APP_IPAD_PRO_129",
+            "IMESSAGE_APP_IPAD_105",
+            "IMESSAGE_APP_IPAD_97"
+          ],
+          "description": "Apple ScreenshotDisplayType"
+        }
+      },
+      "required": [
+        "localization_id",
+        "screenshot_display_type"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  }
+]

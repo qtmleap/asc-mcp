@@ -1,0 +1,159 @@
+{
+  "get_app_store_version_build": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": {
+          "op": "literal",
+          "value": "GET"
+        },
+        "path": {
+          "op": "format",
+          "name": "version_id",
+          "prefix": "/v1/appStoreVersions/",
+          "suffix": "/build",
+          "encode_path": true
+        },
+        "query": {
+          "op": "object",
+          "fields": {}
+        },
+        "body": {
+          "op": "literal",
+          "value": null
+        }
+      }
+    },
+    "used": [
+      "version_id"
+    ],
+    "supports_cursor": false,
+    "query_maps": [],
+    "query_map_overrides": [],
+    "legacy_ignored": []
+  },
+  "set_app_store_version_build": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": {
+          "op": "literal",
+          "value": "PATCH"
+        },
+        "path": {
+          "op": "format",
+          "name": "version_id",
+          "prefix": "/v1/appStoreVersions/",
+          "suffix": "/relationships/build",
+          "encode_path": true
+        },
+        "query": {
+          "op": "object",
+          "fields": {}
+        },
+        "body": {
+          "op": "object",
+          "fields": {
+            "data": {
+              "op": "object",
+              "fields": {
+                "type": {
+                  "op": "literal",
+                  "value": "builds"
+                },
+                "id": {
+                  "op": "arg",
+                  "name": "build_id"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "used": [
+      "version_id",
+      "build_id"
+    ],
+    "supports_cursor": false,
+    "query_maps": [],
+    "query_map_overrides": [],
+    "legacy_ignored": []
+  },
+  "create_screenshot_set": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": {
+          "op": "literal",
+          "value": "POST"
+        },
+        "path": {
+          "op": "literal",
+          "value": "/v1/appScreenshotSets"
+        },
+        "query": {
+          "op": "object",
+          "fields": {}
+        },
+        "body": {
+          "op": "object",
+          "fields": {
+            "data": {
+              "op": "object",
+              "fields": {
+                "type": {
+                  "op": "literal",
+                  "value": "appScreenshotSets"
+                },
+                "attributes": {
+                  "op": "object",
+                  "fields": {
+                    "screenshotDisplayType": {
+                      "op": "arg",
+                      "name": "screenshot_display_type"
+                    }
+                  }
+                },
+                "relationships": {
+                  "op": "object",
+                  "fields": {
+                    "appStoreVersionLocalization": {
+                      "op": "object",
+                      "fields": {
+                        "data": {
+                          "op": "object",
+                          "fields": {
+                            "type": {
+                              "op": "literal",
+                              "value": "appStoreVersionLocalizations"
+                            },
+                            "id": {
+                              "op": "arg",
+                              "name": "localization_id"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "used": [
+      "localization_id",
+      "screenshot_display_type"
+    ],
+    "supports_cursor": false,
+    "query_maps": [],
+    "query_map_overrides": [],
+    "legacy_ignored": []
+  }
+}

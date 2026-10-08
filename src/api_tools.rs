@@ -1,5 +1,5 @@
 //! Public API request dispatch, compiled from offline Go handler probes.
-use crate::client::ApiClient;
+use crate::{api_error::SubmissionError, client::ApiClient};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -15,8 +15,22 @@ pub struct ApiRequest {
 fn recipes() -> &'static Value {
     static RECIPES: OnceLock<Value> = OnceLock::new();
     RECIPES.get_or_init(|| {
-        serde_json::from_str(include_str!("../data/request_recipes.json"))
-            .expect("checked request recipes")
+        let mut legacy: Value = serde_json::from_str(include_str!("../data/request_recipes.json"))
+            .expect("checked request recipes");
+        let additions: Value =
+            serde_json::from_str(include_str!("../data/native_request_recipes.json"))
+                .expect("checked native request recipes");
+        for (name, recipe) in additions.as_object().unwrap() {
+            assert!(
+                legacy
+                    .as_object_mut()
+                    .unwrap()
+                    .insert(name.clone(), recipe.clone())
+                    .is_none(),
+                "native recipe collides with legacy recipe"
+            );
+        }
+        legacy
     })
 }
 pub fn is_compound(name: &str) -> bool {
@@ -524,6 +538,31 @@ pub fn validate_supported_arguments(name: &str, args: &Value) -> Result<()> {
     let recipe = recipes()
         .get(name)
         .with_context(|| format!("unknown tool: {name}"))?;
+    if let Some(tool) = crate::catalog::find(name)
+        && matches!(
+            name,
+            "get_app_store_version_build" | "set_app_store_version_build" | "create_screenshot_set"
+        )
+    {
+        for key in tool["inputSchema"]["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+        {
+            if args[key].as_str().is_none_or(|s| s.trim().is_empty()) {
+                bail!("{key} must be a nonblank string");
+            }
+        }
+        if name == "create_screenshot_set" {
+            let allowed = tool["inputSchema"]["properties"]["screenshot_display_type"]["enum"]
+                .as_array()
+                .unwrap();
+            if !allowed.contains(&args["screenshot_display_type"]) {
+                bail!("invalid screenshot_display_type; use an Apple ScreenshotDisplayType");
+            }
+        }
+    }
     if let Some(ignored) = recipe["legacy_ignored"].as_array() {
         for key in ignored.iter().filter_map(Value::as_str) {
             if let Some(value) = args.get(key).filter(|v| nonempty(v)) {
@@ -637,38 +676,102 @@ pub async fn call(client: &ApiClient, name: &str, args: &Value) -> Result<Value>
     } else {
         Vec::new()
     };
-    let response = client
-        .request(&request.method, path, query, request.body)
-        .await?;
+    let response = if name == "submit_app_for_review" {
+        review_step(client, &request.method, path, query, request.body, std::time::Duration::from_secs(45)).await
+    } else {
+        client.request(&request.method, path, query, request.body).await
+    }
+        .map_err(|cause| {
+            if name == "submit_app_for_review" {
+                anyhow::Error::new(SubmissionError::new(None, vec![], "create_review_submission",
+                    "failed to create review submission; inspect list_review_submissions before retrying".into(), cause))
+            } else { cause }
+        })?;
     if name == "submit_app_for_review" {
         let id = response["data"]["id"]
             .as_str()
-            .context("review submission response is missing data.id")?;
+            .filter(|s| !s.is_empty() && s.len() <= 128 && s.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'))
+            .ok_or_else(|| anyhow::Error::new(SubmissionError::new(None, vec!["create_review_submission"], "read_created_submission",
+                "review submission may have been created; response ID is missing or invalid; inspect list_review_submissions before retrying".into(),
+                anyhow::anyhow!("invalid review submission response ID"))))?;
         let item = json!({"data":{"type":"reviewSubmissionItems","relationships":{"reviewSubmission":{"data":{"type":"reviewSubmissions","id":id}},"appStoreVersion":{"data":{"type":"appStoreVersions","id":args["version_id"]}}}}});
-        client
-            .request("POST", "/v1/reviewSubmissionItems", vec![], Some(item))
+        review_step(client, "POST", "/v1/reviewSubmissionItems", vec![], Some(item), std::time::Duration::from_secs(45))
             .await
-            .with_context(|| format!("review submission {id} created; failed to attach version"))?;
+            .map_err(|cause| anyhow::Error::new(SubmissionError::new(Some(id.into()), vec!["create_review_submission"], "attach_version",
+                format!("review submission {id} created; failed to attach version; reuse this submission rather than creating another"), cause)))?;
         let body =
             json!({"data":{"type":"reviewSubmissions","id":id,"attributes":{"submitted":true}}});
-        return client
-            .request(
+        return review_step(client,
                 "PATCH",
                 &format!("/v1/reviewSubmissions/{}", resource_segment(id)?),
                 vec![],
                 Some(body),
+                std::time::Duration::from_secs(45),
             )
             .await
-            .with_context(|| {
-                format!("review submission {id} created and version attached; failed to submit")
-            });
+            .map_err(|cause| anyhow::Error::new(SubmissionError::new(Some(id.into()), vec!["create_review_submission", "attach_version"], "submit_review_submission",
+                format!("review submission {id} created and version attached; failed to submit; verify this submission before retrying"), cause)));
     }
     Ok(response)
+}
+
+// Finish each review step before the outer MCP deadline, preserving draft IDs
+// and completed steps even when Apple stalls. Cancellation never replays writes.
+async fn review_step(
+    client: &ApiClient,
+    method: &str,
+    path: &str,
+    query: Vec<(String, String)>,
+    body: Option<Value>,
+    deadline: std::time::Duration,
+) -> Result<Value> {
+    tokio::time::timeout(deadline, client.request(method, path, query, body))
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "review step timed out; write outcome is unknown; read state before retrying"
+            )
+        })?
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn review_step_timeout_keeps_unknown_outcome_without_retrying() {
+        let server = httpmock::MockServer::start_async().await;
+        let create = server
+            .mock_async(|when, then| {
+                when.method(httpmock::Method::POST)
+                    .path("/v1/reviewSubmissions");
+                then.status(201)
+                    .delay(std::time::Duration::from_millis(150))
+                    .json_body(json!({"data":{"id":"sub1"}}));
+            })
+            .await;
+        let client = ApiClient::with_endpoint(&server.base_url()).unwrap();
+        let cause = review_step(
+            &client,
+            "POST",
+            "/v1/reviewSubmissions",
+            vec![],
+            Some(json!({})),
+            std::time::Duration::from_millis(40),
+        )
+        .await
+        .unwrap_err();
+        let e = SubmissionError::new(
+            Some("sub1".into()),
+            vec!["create_review_submission"],
+            "attach_version",
+            "draft created; step timed out".into(),
+            cause,
+        );
+        assert!(e.outcome_unknown());
+        assert_eq!(e.to_json()["submission_id"], "sub1");
+        assert!(e.to_string().contains("write outcome is unknown"));
+        create.assert_calls_async(1).await;
+    }
     #[test]
     fn all_captured_requests_match_go() {
         let probes: Value =

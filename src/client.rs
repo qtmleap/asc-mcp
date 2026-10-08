@@ -1,5 +1,6 @@
 //! Public App Store Connect HTTP and ES256 JWT client. Reviewer cookies never
 //! enter this client; asset uploads use a separate unauthenticated request.
+use crate::api_error::{ApiError, MAX_ERROR_BODY, sensitive_values};
 use anyhow::{Result, anyhow, bail};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::{Method, Url};
@@ -163,11 +164,14 @@ impl ApiClient {
         let method =
             Method::from_bytes(method.as_bytes()).map_err(|_| anyhow!("invalid HTTP method"))?;
         let attempts = if method == Method::GET { 3 } else { 1 };
+        let mut secrets = body.as_ref().map(sensitive_values).unwrap_or_default();
+        let token = self.token()?;
+        secrets.push(token.clone());
         for attempt in 0..attempts {
             let mut request = self
                 .http
                 .request(method.clone(), url.clone())
-                .bearer_auth(self.token()?)
+                .bearer_auth(&token)
                 .header("Accept", "application/json")
                 .header("User-Agent", "asc-mcp-rust/0.2.0")
                 .query(&query);
@@ -193,7 +197,34 @@ impl ApiClient {
                 continue;
             }
             if !(200..300).contains(&status) {
-                bail!("App Store Connect returned HTTP {status}")
+                let media_type = response
+                    .headers()
+                    .get(reqwest::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_ascii_lowercase();
+                if !(media_type == "application/json" || media_type.ends_with("+json"))
+                    || response
+                        .content_length()
+                        .is_some_and(|n| n > MAX_ERROR_BODY as u64)
+                {
+                    return Err(ApiError::status_only(status).into());
+                }
+                let mut bytes = Vec::new();
+                loop {
+                    match response.chunk().await {
+                        Ok(Some(chunk)) if chunk.len() <= MAX_ERROR_BODY - bytes.len() => {
+                            bytes.extend_from_slice(&chunk)
+                        }
+                        Ok(None) => break,
+                        _ => return Err(ApiError::status_only(status).into()),
+                    }
+                }
+                return Err(ApiError::from_body(status, &bytes, &secrets).into());
             }
             let headers = response
                 .headers()

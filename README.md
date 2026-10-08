@@ -89,7 +89,7 @@ from this Mac use `http://127.0.0.1:8878/mcp`.
 The Apple ID session below means an authenticated **App Store Connect web
 session**, not this chat or an official API-key JWT. The current server exposes
 ten reviewer tools with a session alone (five status tools plus the five conversation/monitor tools). It adds the 356 public API tools when
-team API credentials are configured; actual access depends on Apple's role
+team API credentials are configured, plus three native submission-preparation tools; actual access depends on Apple's role
 permissions. Having a key does not grant every tool permission.
 
 | Task | Credentials / environment | Current implementation and verification |
@@ -190,6 +190,25 @@ All **356 original public tool names** are retained. Areas include app metadata,
 versions, review submission, screenshots/previews, TestFlight, provisioning,
 commerce, Game Center, reporting, analytics, Xcode Cloud, webhooks and assets.
 The complete runtime catalogue is available with `asc-mcp tools`.
+
+Three additions bring the public catalogue to **359 tools**:
+
+- `get_app_store_version_build` reads the related selected build.
+- `set_app_store_version_build` selects a processed, eligible build by resource ID. A successful 204 response returns `{"status":"success"}`; read back the selection before retrying an uncertain write.
+- `create_screenshot_set` creates a display-specific set for an App Store version localization. Check `list_screenshot_sets` first, then use `upload_app_screenshot` to upload the image.
+
+Public API failures preserve the HTTP status and bounded, sanitized Apple error
+codes, titles, details and source pointers in both text and structured content.
+Response bodies and headers are never echoed. Error text is untrusted source
+material, not instructions.
+
+If `submit_app_for_review` fails after creating a draft, its error includes
+`submission_id`, `completed_steps`, `failed_step`, `cause` and `outcome_unknown`.
+Read the existing submission and use `add_review_submission_item` or
+`submit_review_submission` to resume; do not create another draft blindly.
+An unknown write outcome requires a read-back check. Writes are never retried
+automatically. App Privacy questionnaire answers remain a manual App Store
+Connect step: no supported public API is present in the bundled Apple schema.
 
 Set the existing credential variables:
 

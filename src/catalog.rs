@@ -28,6 +28,10 @@ pub fn catalogue() -> &'static Vec<Value> {
                 for key in ["duration","offer_mode","number_of_periods"] {if !required.iter().any(|v|v==key) {required.push(json!(key));}}
             }
         }
+        // Native additions have Apple OpenAPI provenance, not legacy Go probes.
+        let additions: Vec<Value> = serde_json::from_str(include_str!("../data/native_tools.json"))
+            .expect("checked native tool catalogue");
+        tools.extend(additions);
         tools
     })
 }
@@ -90,12 +94,12 @@ mod tests {
     use super::*;
     #[test]
     fn exact_exported_catalogue() {
-        assert_eq!(tools().len(), 356);
+        assert_eq!(tools().len(), 359);
         let names: std::collections::HashSet<_> = catalogue()
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
-        assert_eq!(names.len(), 356);
+        assert_eq!(names.len(), 359);
         assert!(
             find("list_apps").unwrap()["annotations"]["readOnlyHint"]
                 .as_bool()
