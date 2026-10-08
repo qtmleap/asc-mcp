@@ -86,11 +86,20 @@ impl ApiError {
             .ok()
             .and_then(|v| {
                 v.get("errors").and_then(Value::as_array).map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|e| detail(e, secrets))
-                        .take(MAX_ERRORS)
-                        .collect::<Vec<_>>()
+                    let mut errors = Vec::new();
+                    let mut visited = 0;
+                    for item in items {
+                        if errors.len() == MAX_ERRORS {
+                            break;
+                        }
+                        if let Some(error) = detail(item, secrets) {
+                            errors.push(error);
+                        }
+                        if let Some(associated) = item.pointer("/meta/associatedErrors") {
+                            associated_details(associated, secrets, &mut errors, 0, &mut visited);
+                        }
+                    }
+                    errors
                 })
             })
             .unwrap_or_default();
@@ -116,6 +125,43 @@ impl fmt::Display for ApiError {
     }
 }
 impl std::error::Error for ApiError {}
+
+// Apple can return per-resource validation failures inside this specific meta
+// field. Resource-map keys and unrelated meta never leave the sanitizer.
+fn associated_details(
+    value: &Value,
+    secrets: &[String],
+    out: &mut Vec<ApiErrorDetail>,
+    depth: usize,
+    visited: &mut usize,
+) {
+    if depth > 8 || *visited >= 256 || out.len() >= MAX_ERRORS {
+        return;
+    }
+    *visited += 1;
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                associated_details(value, secrets, out, depth + 1, visited);
+            }
+        }
+        Value::Object(values) => {
+            if let Some(error) = detail(value, secrets) {
+                out.push(error);
+                if let Some(nested) = value.pointer("/meta/associatedErrors") {
+                    associated_details(nested, secrets, out, depth + 1, visited);
+                }
+            } else {
+                for (key, value) in values {
+                    if key != "meta" && key != "links" {
+                        associated_details(value, secrets, out, depth + 1, visited);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
 
 fn field(value: &Value, key: &str, limit: usize, secrets: &[String]) -> Option<String> {
     let s = sanitize(value.get(key)?.as_str()?, secrets, limit);
@@ -349,6 +395,26 @@ pub fn public_error(e: &anyhow::Error) -> (String, Option<Value>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn associated_errors_are_extracted_without_echoing_meta_or_resource_keys() {
+        let e = ApiError::from_body(409, json!({"errors":[{
+            "code":"STATE_ERROR.ENTITY_STATE_INVALID","detail":"check associated errors",
+            "meta":{"associatedErrors":{"private-resource-url":[
+                {"code":"ENTITY_ERROR.MISSING","detail":"Support URL is required","source":{"pointer":"/data/attributes/supportUrl"}},
+                {"code":"ENTITY_ERROR.CONTACT","detail":"bad fixture-password"}
+            ]},"unrelated":{"detail":"private-extra-content"}}
+        }]}).to_string().as_bytes(), &["fixture-password".into()]);
+        let text = e.to_string();
+        assert!(text.contains("Support URL is required"), "{text}");
+        assert!(text.contains("ENTITY_ERROR.CONTACT"), "{text}");
+        for secret in [
+            "private-resource-url",
+            "private-extra-content",
+            "fixture-password",
+        ] {
+            assert!(!text.contains(secret));
+        }
+    }
     fn parse(body: Value, secrets: &[String]) -> ApiError {
         ApiError::from_body(409, body.to_string().as_bytes(), secrets)
     }
