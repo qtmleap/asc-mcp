@@ -12,6 +12,7 @@ under `## [Unreleased]` until a release is cut.
 ## [Unreleased]
 
 ### Fixed
+- `set_app_price_schedule` sends Apple `${price-N}` inline price IDs and rejects empty `prices`; age-rating updates reject unknown arguments, invalid enums and nulls.
 - Preserve sanitized Apple API error details and the completed stage of a failed
   review submission without replaying writes or dropping the underlying cause.
 - Use the generic `ASC MCP` private directory with whole-root legacy fallback; require an explicit reviewer monitor app ID instead of selecting Interceptor. Docker login preserves the service state-root selection.
@@ -25,6 +26,7 @@ under `## [Unreleased]` until a release is cut.
   redirects without exposing response bodies, cookies or redirect destinations.
 
 ### Added
+- `get_app_info`, `update_app_info_categories` and `list_app_price_schedule_prices` public API tools; `list_app_store_review_attachments` accepts `review_detail_id`; `update_age_rating_declaration` forwards Apple's newer typed fields.
 - Build selection/read-back and screenshot-set creation tools for App Store
   submission preparation, backed by Apple's public API.
 - Five read-only, session-only App Review status tools (`list_review_apps`,

@@ -376,6 +376,23 @@ fn canonical_arguments(name: &str, args: &Value) -> Result<Value> {
             alias(&mut args, "offer_eligibility_type", "offer_eligibility", v)?;
         }
     }
+    if name == "list_app_store_review_attachments" {
+        // The legacy argument is named version_id but is the appStoreReviewDetails ID.
+        if let Some(v) = args
+            .get("review_detail_id")
+            .filter(|v| !v.is_null())
+            .cloned()
+        {
+            alias(&mut args, "review_detail_id", "version_id", v)?;
+        }
+        if args
+            .get("version_id")
+            .and_then(Value::as_str)
+            .is_none_or(|s| s.trim().is_empty())
+        {
+            bail!("review_detail_id is required (legacy alias: version_id)")
+        }
+    }
     if name == "update_subscription_offer_code"
         && let Some(v) = args.get("is_active").filter(|v| !v.is_null()).cloned()
     {
@@ -413,6 +430,22 @@ pub fn prepare_request(name: &str, args: &Value) -> Result<ApiRequest> {
     let canonical = canonical_arguments(name, args)?;
     validate_supported_arguments(name, &canonical)?;
     let mut request = build_request(name, &canonical)?;
+    if name == "set_app_content_rights"
+        && (canonical["app_id"]
+            .as_str()
+            .is_none_or(|s| s.trim().is_empty())
+            || !matches!(
+                canonical["content_rights_declaration"].as_str(),
+                Some("DOES_NOT_USE_THIRD_PARTY_CONTENT" | "USES_THIRD_PARTY_CONTENT")
+            )
+            || canonical
+                .as_object()
+                .unwrap()
+                .keys()
+                .any(|k| !matches!(k.as_str(), "app_id" | "content_rights_declaration")))
+    {
+        bail!("provide a nonblank app_id and an official content_rights_declaration only");
+    }
     if name == "create_promoted_purchase"
         && let Some(v) = canonical
             .get("visible_for_all_users")
@@ -421,24 +454,35 @@ pub fn prepare_request(name: &str, args: &Value) -> Result<ApiRequest> {
         request.body.as_mut().context("promoted purchase body")?["data"]["attributes"]["visibleForAllUsers"] =
             v.clone();
     }
-    if name == "update_age_rating_declaration"
-        && let Some(v) = canonical
-            .get("horror_or_fear_themes")
-            .filter(|v| !v.is_null())
-    {
-        enum_string(
-            v,
-            "horror_or_fear_themes",
-            &[
-                "NONE",
-                "INFREQUENT_OR_MILD",
-                "FREQUENT_OR_INTENSE",
-                "INFREQUENT",
-                "FREQUENT",
-            ],
-        )?;
-        request.body.as_mut().context("age rating body")?["data"]["attributes"]["horrorOrFearThemes"] =
-            v.clone();
+    if name == "update_age_rating_declaration" {
+        let attributes =
+            &mut request.body.as_mut().context("age rating body")?["data"]["attributes"];
+        if let Some(v) = canonical.get("horror_or_fear_themes") {
+            attributes["horrorOrFearThemes"] = v.clone();
+        }
+        for (arg, apple, _) in crate::catalog::AGE_RATING_EXTRA {
+            if let Some(v) = canonical.get(*arg) {
+                attributes[*apple] = v.clone();
+            }
+        }
+        if attributes.as_object().is_none_or(|a| a.is_empty()) {
+            bail!("at least one age rating field is required")
+        }
+    }
+    if name == "set_app_price_schedule" {
+        // Apple resolves inline appPrices by `${local-id}` references.
+        let body = request.body.as_mut().context("price schedule body")?;
+        for path in ["/data/relationships/manualPrices/data", "/included"] {
+            for item in body
+                .pointer_mut(path)
+                .and_then(Value::as_array_mut)
+                .into_iter()
+                .flatten()
+            {
+                let id = item["id"].as_str().context("inline price id")?;
+                item["id"] = json!(format!("${{{id}}}"));
+            }
+        }
     }
     if name == "create_subscription_offer_code" {
         enum_string(
@@ -563,6 +607,64 @@ pub fn validate_supported_arguments(name: &str, args: &Value) -> Result<()> {
             }
         }
     }
+    if matches!(
+        name,
+        "get_app_info" | "update_app_info_categories" | "list_app_price_schedule_prices"
+    ) && let Some(tool) = crate::catalog::find(name)
+    {
+        for key in tool["inputSchema"]["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+        {
+            if args[key].as_str().is_none_or(|s| s.trim().is_empty()) {
+                bail!("{key} must be a nonblank string");
+            }
+        }
+        if name == "update_app_info_categories"
+            && args
+                .get("secondary_category_id")
+                .is_some_and(|v| !v.is_null() && v.as_str().is_none_or(|s| s.trim().is_empty()))
+        {
+            bail!("secondary_category_id must be a nonblank string when provided");
+        }
+        if name == "list_app_price_schedule_prices" {
+            enum_string(&args["price_type"], "price_type", &["MANUAL", "AUTOMATIC"])?;
+        }
+    }
+    if name == "update_age_rating_declaration" {
+        let tool = crate::catalog::find(name).context("age rating tool")?;
+        let properties = tool["inputSchema"]["properties"].as_object().unwrap();
+        for (key, value) in args.as_object().context("arguments must be an object")? {
+            let Some(property) = properties.get(key) else {
+                bail!("unknown update_age_rating_declaration argument {key}")
+            };
+            if key == "declaration_id" {
+                continue;
+            }
+            if value.is_null() {
+                bail!("{key} must not be null; omit it to leave the rating unchanged")
+            }
+            match property["enum"].as_array() {
+                Some(allowed) => {
+                    if !allowed.contains(value) {
+                        let allowed: Vec<_> = allowed.iter().filter_map(Value::as_str).collect();
+                        bail!("invalid {key}; expected {}", allowed.join(", "))
+                    }
+                }
+                None if property["type"] == "string"
+                    && key == "developer_age_rating_info_url"
+                    && !value.as_str().is_some_and(|s| {
+                        url::Url::parse(s).is_ok_and(|u| matches!(u.scheme(), "http" | "https"))
+                    }) =>
+                {
+                    bail!("developer_age_rating_info_url must be an http(s) URL")
+                }
+                None => {}
+            }
+        }
+    }
     if let Some(ignored) = recipe["legacy_ignored"].as_array() {
         for key in ignored.iter().filter_map(Value::as_str) {
             if let Some(value) = args.get(key).filter(|v| nonempty(v)) {
@@ -631,6 +733,9 @@ pub fn validate_supported_arguments(name: &str, args: &Value) -> Result<()> {
         )
     {
         bail!("release_type must be INTERNAL_BETA, EXTERNAL_BETA, or APP_STORE")
+    }
+    if name == "set_app_price_schedule" && args["prices"].as_array().is_some_and(|p| p.is_empty()) {
+        bail!("prices must not be empty; use the zero-price point for a free app")
     }
     if matches!(
         name,

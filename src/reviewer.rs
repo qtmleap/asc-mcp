@@ -23,6 +23,9 @@ use url::Url;
 
 #[cfg(unix)]
 mod fs_safe;
+mod privacy;
+#[cfg(test)]
+mod privacy_tests;
 #[cfg(test)]
 mod recovery_tests;
 #[cfg(test)]
@@ -662,6 +665,7 @@ impl Reviewer {
         }
         let mut tools: Vec<Value> = ops.into_iter().map(|(name,description,required,readonly)| { let props: BTreeMap<_,_> = required.iter().map(|k| (*k,json!({"type":"string"}))).collect(); json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":props,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":readonly,"openWorldHint":name != "acknowledge_reviewer_updates"}}) }).collect();
         tools.extend(status::tools());
+        tools.extend(privacy::tools());
         tools
     }
 
@@ -861,7 +865,7 @@ impl Reviewer {
         let mut cookie = reqwest::header::HeaderValue::from_str(&cookie_header(cookies)?)
             .map_err(|_| anyhow::anyhow!("reviewer_session_invalid"))?;
         cookie.set_sensitive(true);
-        let post = method == Method::POST;
+        let write = method != Method::GET;
         let media = if iris {
             "application/vnd.api+json"
         } else {
@@ -875,7 +879,7 @@ impl Reviewer {
             .header("Content-Type", media);
         if iris {
             builder = builder.header("X-Csrf-Itc", "[asc-ui]");
-            if post {
+            if write {
                 builder = builder
                     .header("Origin", self.origin.origin().ascii_serialization())
                     .header("Referer", self.origin.as_str());
@@ -894,7 +898,7 @@ impl Reviewer {
             }
         }
         let mut response = builder.send().await.map_err(|_| {
-            anyhow::anyhow!(if post {
+            anyhow::anyhow!(if write {
                 "delivery_unknown: request interrupted; read the thread before retrying"
             } else {
                 "reviewer_request_failed: HTTP connection failed"
@@ -949,7 +953,7 @@ impl Reviewer {
             bail!("reviewer_unexpected_redirect: redirect not followed");
         }
         if !status.is_success() {
-            if post && status.is_server_error() {
+            if write && status.is_server_error() {
                 bail!(
                     "delivery_unknown: Apple returned HTTP {}; read the thread before retrying",
                     status.as_u16()
@@ -959,7 +963,7 @@ impl Reviewer {
         }
         let mut headers = response.headers().clone();
         headers.remove(reqwest::header::SET_COOKIE);
-        if iris && post {
+        if iris && write {
             headers.insert(
                 "x-asc-mcp-status",
                 reqwest::header::HeaderValue::from_str(status.as_str()).unwrap(),
@@ -967,7 +971,7 @@ impl Reviewer {
         }
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| {
-            anyhow::anyhow!(if post {
+            anyhow::anyhow!(if write {
                 "delivery_unknown: interrupted response"
             } else {
                 "reviewer_response_invalid"
@@ -976,7 +980,7 @@ impl Reviewer {
             if chunk.len() > MAX_BODY - bytes.len() {
                 bail!(
                     "{}",
-                    if post {
+                    if write {
                         "delivery_unknown: oversized response"
                     } else {
                         "reviewer_response_invalid: oversized response"
@@ -985,7 +989,7 @@ impl Reviewer {
             }
             bytes.extend_from_slice(&chunk);
         }
-        if iris && post && bytes.is_empty() {
+        if iris && write && bytes.is_empty() {
             return Ok(Raw {
                 data: json!({"data":null}),
                 headers,
@@ -993,7 +997,7 @@ impl Reviewer {
             });
         }
         let data = serde_json::from_slice(&bytes).map_err(|_| {
-            anyhow::anyhow!(if post {
+            anyhow::anyhow!(if write {
                 "delivery_unknown: invalid JSON response"
             } else {
                 "reviewer_response_invalid: expected JSON"
@@ -1112,6 +1116,7 @@ impl Reviewer {
         }
         match name {
             n if status::NAMES.contains(&n) => self.status_call(n, args, api_configured).await,
+            n if privacy::NAMES.contains(&n) => self.privacy_call(n, args).await,
             "check_reviewer_updates" => self.check_updates().await,
             "acknowledge_reviewer_updates" => self.acknowledge(arg(args, "snapshot_token")?),
             "list_reviewer_threads" => {

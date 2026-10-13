@@ -109,5 +109,155 @@
       "idempotentHint": false,
       "openWorldHint": true
     }
+  },
+  {
+    "name": "get_app_info",
+    "description": "Read one app info resource, including its state, age ratings and category relationships. Use include to return related resources (for example primaryCategory or ageRatingDeclaration) and fields to select attributes; fields keys are Apple resource types such as appInfos, ageRatingDeclarations, appInfoLocalizations and appCategories. Use get_app_infos to discover app info IDs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "app_info_id": {
+          "type": "string",
+          "description": "The app info ID, from get_app_infos"
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related resources to include: app, ageRatingDeclaration, appInfoLocalizations, primaryCategory, primarySubcategoryOne, primarySubcategoryTwo, secondaryCategory, secondarySubcategoryOne, secondarySubcategoryTwo."
+        },
+        "fields": {
+          "type": "object",
+          "description": "Sparse fieldsets. Keys are Apple resource types (appInfos, apps, ageRatingDeclarations, appInfoLocalizations, appCategories); values are arrays of field names, e.g. {\"appInfos\": [\"primaryCategory\"]}."
+        }
+      },
+      "required": [
+        "app_info_id"
+      ]
+    },
+    "annotations": {
+      "title": "Get App Info",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "update_app_info_categories",
+    "description": "Set the primary and optionally the secondary category of an app info (PATCH relationships on /v1/appInfos). Category IDs come from list_app_categories. A secondary category is left unchanged when secondary_category_id is omitted. Read get_app_info with include=primaryCategory,secondaryCategory to verify.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "app_info_id": {
+          "type": "string",
+          "description": "The app info ID, from get_app_infos"
+        },
+        "primary_category_id": {
+          "type": "string",
+          "description": "The primary appCategories ID, e.g. PRODUCTIVITY"
+        },
+        "secondary_category_id": {
+          "type": "string",
+          "description": "Optional secondary appCategories ID"
+        }
+      },
+      "required": [
+        "app_info_id",
+        "primary_category_id"
+      ]
+    },
+    "annotations": {
+      "title": "Update App Info Categories",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "list_app_price_schedule_prices",
+    "description": "List the actual manual or automatic prices of an app price schedule, including the price point (customerPrice, proceeds) and territory when included. Use this to read back a schedule created by set_app_price_schedule, for example to confirm a zero customer price. Get the schedule ID from get_app_price_schedule.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "price_schedule_id": {
+          "type": "string",
+          "description": "The appPriceSchedules ID"
+        },
+        "price_type": {
+          "type": "string",
+          "enum": [
+            "MANUAL",
+            "AUTOMATIC"
+          ],
+          "description": "MANUAL lists explicitly set prices; AUTOMATIC lists prices derived from the base territory."
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Opaque pagination cursor. Pass the URL surfaced as Next cursor in the previous response to fetch the next page."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of prices to return (default 100, maximum 200)"
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related resources to include: appPricePoint, territory."
+        },
+        "fields": {
+          "type": "object",
+          "description": "Sparse fieldsets. Keys: appPrices, appPricePoints, territories; values are arrays of field names."
+        },
+        "filter": {
+          "type": "object",
+          "description": "Filters. Keys: startDate, endDate, territory; values are arrays of strings."
+        }
+      },
+      "required": [
+        "price_schedule_id",
+        "price_type"
+      ]
+    },
+    "annotations": {
+      "title": "List App Price Schedule Prices",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "set_app_content_rights",
+    "description": "Set the app content-rights declaration from the publisher's confirmed answer. Uses the public AppUpdateRequest schema; read get_app to verify.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "app_id": {
+          "type": "string"
+        },
+        "content_rights_declaration": {
+          "type": "string",
+          "enum": [
+            "DOES_NOT_USE_THIRD_PARTY_CONTENT",
+            "USES_THIRD_PARTY_CONTENT"
+          ]
+        }
+      },
+      "required": [
+        "app_id",
+        "content_rights_declaration"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    }
   }
 ]

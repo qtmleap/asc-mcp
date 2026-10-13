@@ -12,6 +12,37 @@ use httpmock::{
 use serde_json::json;
 
 #[test]
+fn content_rights_declaration_compiles_only_official_values() {
+    let request = prepare_request(
+        "set_app_content_rights",
+        &json!({"app_id":"app1", "content_rights_declaration":"DOES_NOT_USE_THIRD_PARTY_CONTENT"}),
+    )
+    .unwrap();
+    assert_eq!(request.method, "PATCH");
+    assert_eq!(request.path, "/v1/apps/app1");
+    assert_eq!(
+        request.body.unwrap(),
+        json!({"data":{"type":"apps","id":"app1","attributes":{"contentRightsDeclaration":"DOES_NOT_USE_THIRD_PARTY_CONTENT"}}})
+    );
+    for value in ["", "UNKNOWN", "USES_THIRD_PARTY_CONTENT "] {
+        assert!(
+            prepare_request(
+                "set_app_content_rights",
+                &json!({"app_id":"app1", "content_rights_declaration":value})
+            )
+            .is_err()
+        );
+    }
+    assert!(
+        prepare_request(
+            "set_app_content_rights",
+            &json!({"app_id":" ", "content_rights_declaration":"USES_THIRD_PARTY_CONTENT"})
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn submission_tools_are_advertised_and_compile_official_requests() {
     for name in [
         "get_app_store_version_build",
@@ -434,4 +465,337 @@ async fn oversized_error_body_keeps_status_but_does_not_echo_details() {
     assert!(text.contains("409"), "{text}");
     assert!(!text.contains("sensitive-marker"));
     assert!(text.len() < 2_000);
+}
+
+fn args_err(name: &str, args: serde_json::Value) -> String {
+    format!("{:#}", prepare_request(name, &args).unwrap_err())
+}
+
+#[test]
+fn app_price_schedule_uses_apple_local_ids_and_requires_prices() {
+    let r = prepare_request(
+        "set_app_price_schedule",
+        &json!({"app_id":"a1","base_territory_id":"USA","prices":[{"price_point_id":"zero","start_date":"2026-01-01"},{"price_point_id":"p2"}]}),
+    )
+    .unwrap();
+    let body = r.body.unwrap();
+    let refs = &body["data"]["relationships"]["manualPrices"]["data"];
+    assert_eq!(refs[0], json!({"type":"appPrices","id":"${price-1}"}));
+    assert_eq!(refs[1]["id"], "${price-2}");
+    assert_eq!(body["included"][0]["id"], "${price-1}");
+    assert_eq!(body["included"][1]["id"], "${price-2}");
+    assert_eq!(
+        body["included"][0]["relationships"]["appPricePoint"]["data"],
+        json!({"type":"appPricePoints","id":"zero"})
+    );
+    for args in [
+        json!({"app_id":"a1","base_territory_id":"USA"}),
+        json!({"app_id":"a1","base_territory_id":"USA","prices":[]}),
+        json!({"app_id":"a1","base_territory_id":"USA","prices":null}),
+    ] {
+        assert!(
+            prepare_request("set_app_price_schedule", &args).is_err(),
+            "{args}"
+        );
+    }
+    let tool = catalog::find("set_app_price_schedule").unwrap();
+    assert!(
+        tool["inputSchema"]["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("prices"))
+    );
+    let text = tool.to_string();
+    assert!(
+        text.contains("zero") && !text.contains("pass an empty prices array to keep the app free")
+    );
+}
+
+#[test]
+fn app_info_read_and_category_tools_compile_apple_shapes() {
+    let r = prepare_request(
+        "get_app_info",
+        &json!({"app_info_id":"i1","include":["primaryCategory","ageRatingDeclaration"],"fields":{"appInfos":["primaryCategory"]}}),
+    )
+    .unwrap();
+    assert_eq!(
+        (r.method.as_str(), r.path.as_str()),
+        ("GET", "/v1/appInfos/i1")
+    );
+    assert!(r.query.contains(&(
+        "include".into(),
+        "primaryCategory,ageRatingDeclaration".into()
+    )));
+    assert!(
+        r.query
+            .contains(&("fields[appInfos]".into(), "primaryCategory".into()))
+    );
+    assert!(prepare_request("get_app_info", &json!({"app_info_id":" "})).is_err());
+
+    let r = prepare_request(
+        "update_app_info_categories",
+        &json!({"app_info_id":"i1","primary_category_id":"GAMES"}),
+    )
+    .unwrap();
+    assert_eq!(
+        (r.method.as_str(), r.path.as_str()),
+        ("PATCH", "/v1/appInfos/i1")
+    );
+    assert_eq!(
+        r.body.unwrap(),
+        json!({"data":{"type":"appInfos","id":"i1","relationships":{"primaryCategory":{"data":{"type":"appCategories","id":"GAMES"}}}}})
+    );
+    let r = prepare_request(
+        "update_app_info_categories",
+        &json!({"app_info_id":"i1","primary_category_id":"GAMES","secondary_category_id":"EDUCATION"}),
+    )
+    .unwrap();
+    assert_eq!(
+        r.body.unwrap()["data"]["relationships"]["secondaryCategory"]["data"],
+        json!({"type":"appCategories","id":"EDUCATION"})
+    );
+    for args in [
+        json!({"app_info_id":"i1"}),
+        json!({"app_info_id":"i1","primary_category_id":""}),
+        json!({"app_info_id":"i1","primary_category_id":"  "}),
+        json!({"app_info_id":"i1","primary_category_id":"GAMES","secondary_category_id":" "}),
+        json!({"primary_category_id":"GAMES"}),
+    ] {
+        assert!(
+            prepare_request("update_app_info_categories", &args).is_err(),
+            "{args}"
+        );
+    }
+}
+
+#[test]
+fn app_price_schedule_prices_list_manual_and_automatic() {
+    let manual = prepare_request(
+        "list_app_price_schedule_prices",
+        &json!({"price_schedule_id":"s1","price_type":"MANUAL","include":["appPricePoint","territory"],"limit":500,"fields":{"appPricePoints":["customerPrice"]}}),
+    )
+    .unwrap();
+    assert_eq!(manual.path, "/v1/appPriceSchedules/s1/manualPrices");
+    assert!(
+        manual
+            .query
+            .contains(&("include".into(), "appPricePoint,territory".into()))
+    );
+    assert!(manual.query.contains(&("limit".into(), "200".into())));
+    assert!(
+        manual
+            .query
+            .contains(&("fields[appPricePoints]".into(), "customerPrice".into()))
+    );
+    let auto = prepare_request(
+        "list_app_price_schedule_prices",
+        &json!({"price_schedule_id":"s1","price_type":"AUTOMATIC"}),
+    )
+    .unwrap();
+    assert_eq!(auto.path, "/v1/appPriceSchedules/s1/automaticPrices");
+    let next = prepare_request(
+        "list_app_price_schedule_prices",
+        &json!({"price_schedule_id":"s1","price_type":"MANUAL","cursor":"https://api.appstoreconnect.apple.com/v1/appPriceSchedules/s1/manualPrices?cursor=abc"}),
+    )
+    .unwrap();
+    assert_eq!(next.query, vec![("cursor".to_string(), "abc".to_string())]);
+    for args in [
+        json!({"price_schedule_id":"s1"}),
+        json!({"price_schedule_id":"s1","price_type":"manual"}),
+        json!({"price_schedule_id":"s1","price_type":"OTHER"}),
+        json!({"price_type":"MANUAL"}),
+    ] {
+        assert!(
+            prepare_request("list_app_price_schedule_prices", &args).is_err(),
+            "{args}"
+        );
+    }
+}
+
+#[test]
+fn app_availability_uses_v2_app_relationship() {
+    let r = prepare_request("get_app_availability", &json!({"app_id":"a1"})).unwrap();
+    assert_eq!(r.path, "/v1/apps/a1/appAvailabilityV2");
+}
+
+#[test]
+fn review_attachment_list_accepts_review_detail_id_and_legacy_alias() {
+    let new = prepare_request(
+        "list_app_store_review_attachments",
+        &json!({"review_detail_id":"d1"}),
+    )
+    .unwrap();
+    assert_eq!(
+        new.path,
+        "/v1/appStoreReviewDetails/d1/appStoreReviewAttachments"
+    );
+    let old = prepare_request(
+        "list_app_store_review_attachments",
+        &json!({"version_id":"d1"}),
+    )
+    .unwrap();
+    assert_eq!(old.path, new.path);
+    let both = prepare_request(
+        "list_app_store_review_attachments",
+        &json!({"version_id":"d1","review_detail_id":"d1"}),
+    )
+    .unwrap();
+    assert_eq!(both.path, new.path);
+    assert!(
+        args_err(
+            "list_app_store_review_attachments",
+            json!({"version_id":"d1","review_detail_id":"d2"})
+        )
+        .contains("conflicting")
+    );
+    assert!(prepare_request("list_app_store_review_attachments", &json!({})).is_err());
+    assert!(
+        prepare_request(
+            "list_app_store_review_attachments",
+            &json!({"review_detail_id":" "})
+        )
+        .is_err()
+    );
+    let tool = catalog::find("list_app_store_review_attachments").unwrap();
+    assert!(
+        tool["inputSchema"]["properties"]
+            .get("review_detail_id")
+            .is_some()
+    );
+}
+
+#[test]
+fn age_rating_catalogue_matches_apple_schema_and_forwards_new_fields() {
+    let spec: serde_json::Value =
+        serde_json::from_str(include_str!("../doc/references/apple-asc/openapi.oas.json")).unwrap();
+    let apple = &spec["components"]["schemas"]["AgeRatingDeclarationUpdateRequest"]["properties"]["data"]
+        ["properties"]["attributes"]["properties"];
+    let tool = catalog::find("update_age_rating_declaration").unwrap();
+    for (arg, name, kind) in catalog::AGE_RATING_EXTRA {
+        let mut property = &apple[*name];
+        if let Some(reference) = property["$ref"].as_str() {
+            property = spec.pointer(reference.trim_start_matches('#')).unwrap();
+        }
+        assert!(property.is_object(), "{name} not in Apple schema");
+        let advertised = &tool["inputSchema"]["properties"][*arg];
+        assert!(advertised.is_object(), "{arg} not advertised");
+        match catalog::age_rating_enum(kind) {
+            Some(values) => {
+                assert_eq!(property["enum"], json!(values), "{name}");
+                assert_eq!(advertised["enum"], json!(values), "{arg}");
+            }
+            None if *kind == "bool" => assert_eq!(advertised["type"], "boolean"),
+            None => assert_eq!(advertised["type"], "string"),
+        }
+    }
+    let r = prepare_request(
+        "update_age_rating_declaration",
+        &json!({"declaration_id":"d1","loot_box":false,"guns_or_other_weapons":"INFREQUENT","kids_age_band":"SIX_TO_EIGHT","age_rating_override_v2":"EIGHTEEN_PLUS","korea_age_rating_override":"NONE","developer_age_rating_info_url":"https://example.com/rating","gambling":false,"contests":"NONE"}),
+    )
+    .unwrap();
+    let a = &r.body.unwrap()["data"]["attributes"];
+    assert_eq!(a["lootBox"], false);
+    assert_eq!(a["gunsOrOtherWeapons"], "INFREQUENT");
+    assert_eq!(a["kidsAgeBand"], "SIX_TO_EIGHT");
+    assert_eq!(a["ageRatingOverrideV2"], "EIGHTEEN_PLUS");
+    assert_eq!(a["koreaAgeRatingOverride"], "NONE");
+    assert_eq!(a["developerAgeRatingInfoUrl"], "https://example.com/rating");
+    assert_eq!(a["gambling"], false);
+    assert_eq!(a["contests"], "NONE");
+}
+
+#[test]
+fn age_rating_rejects_unknown_arguments_invalid_enums_and_nulls() {
+    let base = |extra: serde_json::Value| {
+        let mut v = json!({"declaration_id":"d1"});
+        v.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        v
+    };
+    for extra in [
+        json!({"app_privacy_data_collected":true}),
+        json!({"guns_or_other_weapons":"SOMETIMES"}),
+        json!({"contests":"SOMETIMES"}),
+        json!({"contests":""}),
+        json!({"kids_age_band":"TEN"}),
+        json!({"age_rating_override_v2":"SEVENTEEN_PLUS"}),
+        json!({"korea_age_rating_override":"EIGHTEEN_PLUS"}),
+        json!({"developer_age_rating_info_url":"javascript:alert(1)"}),
+        json!({"loot_box":null}),
+        json!({"gambling":null}),
+        json!({"horror_or_fear_themes":null}),
+        json!({"loot_box":"true"}),
+    ] {
+        assert!(
+            prepare_request("update_age_rating_declaration", &base(extra.clone())).is_err(),
+            "{extra}"
+        );
+    }
+    assert!(
+        prepare_request(
+            "update_age_rating_declaration",
+            &json!({"declaration_id":"d1"})
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn new_tools_work_over_http_and_mutations_are_attempted_once_on_409() {
+    let host = MockServer::start_async().await;
+    let read = host
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/v1/appPriceSchedules/s1/manualPrices")
+                .query_param("include", "appPricePoint");
+            then.status(200)
+                .json_body(json!({"data":[{"type":"appPrices","id":"p1"}]}));
+        })
+        .await;
+    let price = host
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1/appPriceSchedules")
+                .body_includes("${price-1}");
+            then.status(409)
+                .header("Content-Type", "application/json")
+                .json_body(json!({"errors":[{"code":"ENTITY_ERROR","detail":"conflict"}]}));
+        })
+        .await;
+    let categories = host
+        .mock_async(|when, then| {
+            when.method(PATCH).path("/v1/appInfos/i1");
+            then.status(409)
+                .header("Content-Type", "application/json")
+                .json_body(json!({"errors":[{"code":"STATE_ERROR","detail":"locked"}]}));
+        })
+        .await;
+    let client = ApiClient::with_endpoint(&host.base_url()).unwrap();
+    call(
+        &client,
+        "list_app_price_schedule_prices",
+        &json!({"price_schedule_id":"s1","price_type":"MANUAL","include":["appPricePoint"]}),
+    )
+    .await
+    .unwrap();
+    let error = call(
+        &client,
+        "set_app_price_schedule",
+        &json!({"app_id":"a1","base_territory_id":"USA","prices":[{"price_point_id":"zero"}]}),
+    )
+    .await
+    .unwrap_err();
+    assert!(format!("{error:#}").contains("409"));
+    let error = call(
+        &client,
+        "update_app_info_categories",
+        &json!({"app_info_id":"i1","primary_category_id":"GAMES"}),
+    )
+    .await
+    .unwrap_err();
+    assert!(format!("{error:#}").contains("STATE_ERROR"));
+    read.assert_calls_async(1).await;
+    price.assert_calls_async(1).await;
+    categories.assert_calls_async(1).await;
 }

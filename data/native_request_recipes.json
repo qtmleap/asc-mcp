@@ -155,5 +155,344 @@
     "query_maps": [],
     "query_map_overrides": [],
     "legacy_ignored": []
+  },
+  "get_app_info": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": {
+          "op": "literal",
+          "value": "GET"
+        },
+        "path": {
+          "op": "format",
+          "name": "app_info_id",
+          "prefix": "/v1/appInfos/",
+          "suffix": "",
+          "encode_path": true
+        },
+        "query": {
+          "op": "object",
+          "fields": {
+            "include": {
+              "op": "when",
+              "name": "include",
+              "condition": "nonempty",
+              "value": {
+                "op": "array",
+                "items": [
+                  {
+                    "op": "join",
+                    "name": "include",
+                    "separator": ","
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "body": {
+          "op": "literal",
+          "value": null
+        }
+      }
+    },
+    "used": [
+      "app_info_id",
+      "include",
+      "fields"
+    ],
+    "supports_cursor": false,
+    "query_maps": [
+      "fields"
+    ],
+    "query_map_overrides": [],
+    "legacy_ignored": []
+  },
+  "update_app_info_categories": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": {
+          "op": "literal",
+          "value": "PATCH"
+        },
+        "path": {
+          "op": "format",
+          "name": "app_info_id",
+          "prefix": "/v1/appInfos/",
+          "suffix": "",
+          "encode_path": true
+        },
+        "query": {
+          "op": "object",
+          "fields": {}
+        },
+        "body": {
+          "op": "object",
+          "fields": {
+            "data": {
+              "op": "object",
+              "fields": {
+                "type": {
+                  "op": "literal",
+                  "value": "appInfos"
+                },
+                "id": {
+                  "op": "arg",
+                  "name": "app_info_id"
+                },
+                "relationships": {
+                  "op": "object",
+                  "fields": {
+                    "primaryCategory": {
+                      "op": "object",
+                      "fields": {
+                        "data": {
+                          "op": "object",
+                          "fields": {
+                            "type": {
+                              "op": "literal",
+                              "value": "appCategories"
+                            },
+                            "id": {
+                              "op": "arg",
+                              "name": "primary_category_id"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "secondaryCategory": {
+                      "op": "when",
+                      "name": "secondary_category_id",
+                      "condition": "nonempty",
+                      "value": {
+                        "op": "object",
+                        "fields": {
+                          "data": {
+                            "op": "object",
+                            "fields": {
+                              "type": {
+                                "op": "literal",
+                                "value": "appCategories"
+                              },
+                              "id": {
+                                "op": "arg",
+                                "name": "secondary_category_id"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "used": [
+      "app_info_id",
+      "primary_category_id",
+      "secondary_category_id"
+    ],
+    "supports_cursor": false,
+    "query_maps": [],
+    "query_map_overrides": [],
+    "legacy_ignored": []
+  },
+  "list_app_price_schedule_prices": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": {
+          "op": "literal",
+          "value": "GET"
+        },
+        "path": {
+          "op": "format",
+          "name": "price_schedule_id",
+          "prefix": "/v1/appPriceSchedules/",
+          "suffix": "/manualPrices",
+          "encode_path": true
+        },
+        "query": {
+          "op": "object",
+          "fields": {
+            "include": {
+              "op": "when",
+              "name": "include",
+              "condition": "nonempty",
+              "value": {
+                "op": "array",
+                "items": [
+                  {
+                    "op": "join",
+                    "name": "include",
+                    "separator": ","
+                  }
+                ]
+              }
+            },
+            "limit": {
+              "op": "array",
+              "items": [
+                {
+                  "op": "arg",
+                  "name": "limit",
+                  "string": true,
+                  "default": "100",
+                  "nonpositive_default": "100",
+                  "max": 200
+                }
+              ]
+            }
+          }
+        },
+        "body": {
+          "op": "literal",
+          "value": null
+        }
+      }
+    },
+    "used": [
+      "price_schedule_id",
+      "price_type",
+      "cursor",
+      "limit",
+      "include",
+      "fields",
+      "filter"
+    ],
+    "supports_cursor": true,
+    "query_maps": [
+      "filter",
+      "fields"
+    ],
+    "query_map_overrides": [],
+    "branches": [
+      {
+        "when": "price_type",
+        "equals": "AUTOMATIC",
+        "request": {
+          "op": "object",
+          "fields": {
+            "method": {
+              "op": "literal",
+              "value": "GET"
+            },
+            "path": {
+              "op": "format",
+              "name": "price_schedule_id",
+              "prefix": "/v1/appPriceSchedules/",
+              "suffix": "/automaticPrices",
+              "encode_path": true
+            },
+            "query": {
+              "op": "object",
+              "fields": {
+                "include": {
+                  "op": "when",
+                  "name": "include",
+                  "condition": "nonempty",
+                  "value": {
+                    "op": "array",
+                    "items": [
+                      {
+                        "op": "join",
+                        "name": "include",
+                        "separator": ","
+                      }
+                    ]
+                  }
+                },
+                "limit": {
+                  "op": "array",
+                  "items": [
+                    {
+                      "op": "arg",
+                      "name": "limit",
+                      "string": true,
+                      "default": "100",
+                      "nonpositive_default": "100",
+                      "max": 200
+                    }
+                  ]
+                }
+              }
+            },
+            "body": {
+              "op": "literal",
+              "value": null
+            }
+          }
+        }
+      }
+    ],
+    "legacy_ignored": []
+  },
+  "set_app_content_rights": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": {
+          "op": "literal",
+          "value": "PATCH"
+        },
+        "path": {
+          "op": "format",
+          "name": "app_id",
+          "prefix": "/v1/apps/",
+          "suffix": "",
+          "encode_path": true
+        },
+        "query": {
+          "op": "object",
+          "fields": {}
+        },
+        "body": {
+          "op": "object",
+          "fields": {
+            "data": {
+              "op": "object",
+              "fields": {
+                "type": {
+                  "op": "literal",
+                  "value": "apps"
+                },
+                "id": {
+                  "op": "arg",
+                  "name": "app_id"
+                },
+                "attributes": {
+                  "op": "object",
+                  "fields": {
+                    "contentRightsDeclaration": {
+                      "op": "arg",
+                      "name": "content_rights_declaration"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "used": [
+      "app_id",
+      "content_rights_declaration"
+    ],
+    "supports_cursor": false,
+    "query_maps": [],
+    "query_map_overrides": [],
+    "legacy_ignored": []
   }
 }

@@ -8,12 +8,13 @@ available; runtime validation reports legacy arguments which had no implementati
 
 ## Offline compatibility evidence
 
-The 356-tool Go snapshot and request probes remain unchanged. Three native
+The 356-tool Go snapshot and request probes remain unchanged. Seven native
 additions are maintained separately in `data/native_tools.json` and
 `data/native_request_recipes.json`: `get_app_store_version_build`,
-`set_app_store_version_build`, and `create_screenshot_set`. They use the bundled
+`set_app_store_version_build`, and `create_screenshot_set`, `get_app_info`, `update_app_info_categories` and
+`list_app_price_schedule_prices` and `set_app_content_rights`. They use the bundled
 Apple OpenAPI build relationship and screenshot-set schemas, with Rust HTTP and
-protocol regression tests. The runtime public catalogue therefore has 359 tools;
+protocol regression tests. The runtime public catalogue therefore has 363 tools;
 the original Go evidence still covers exactly 356.
 
 `migration/export.sh`, run in a separate checkout of the recorded Go revision, installs a temporary, build-tagged capture client and runs
@@ -60,6 +61,20 @@ The primary specification is `doc/references/apple-asc/openapi.oas.json`:
 - `AgeRatingDeclarationUpdateRequest` explicitly defines `horrorOrFearThemes`.
   The legacy `horror_or_fear_themes` argument, decoded but never assigned by Go,
   is now mapped with the enum values in Apple's schema.
+
+- `AppPriceScheduleCreateRequest` inline `appPrices` are referenced by local
+  `${price-N}` IDs in both `manualPrices` and `included`; the Go fixtures' bare
+  `price-N` is corrected at runtime only. `prices` is required and non-empty
+  (free means the zero-price app price point).
+- `list_app_store_review_attachments`: the Go `version_id` was already the
+  `appStoreReviewDetails` ID. `review_detail_id` is the new name; `version_id` is
+  a legacy alias and conflicting values are errors.
+- The age-rating tool also forwards the remaining typed
+  `AgeRatingDeclarationUpdateRequest` attributes (excluding deprecated
+  `ageRatingOverride`), rejecting unknown arguments, invalid enums and nulls.
+- `get_app_availability` already targets `/v1/apps/{id}/appAvailabilityV2`;
+  territories are read with `list_territory_availabilities` (v2).
+- Apple's public API has no App Privacy questionnaire endpoint; it is UI-only.
 
 Alias conflicts are errors. The unchanged Go fixtures exercise baseline
 `build_request`; separate regression tests exercise runtime `prepare_request`

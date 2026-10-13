@@ -88,7 +88,7 @@ from this Mac use `http://127.0.0.1:8878/mcp`.
 
 The Apple ID session below means an authenticated **App Store Connect web
 session**, not this chat or an official API-key JWT. The current server exposes
-fourteen reviewer tools with a session alone (five status tools, five conversation/monitor tools and four reply/recovery tools). It adds 359 public API tools (356 legacy and three native additions) when
+seventeen session-backed tools with a session alone (five status tools, five conversation/monitor tools, four reply/recovery tools and three App Privacy tools). It adds 363 public API tools (356 legacy and seven native additions) when
 team API credentials are configured; actual access depends on Apple's role
 permissions. Having a key does not grant every tool permission.
 
@@ -191,11 +191,19 @@ versions, review submission, screenshots/previews, TestFlight, provisioning,
 commerce, Game Center, reporting, analytics, Xcode Cloud, webhooks and assets.
 The complete runtime catalogue is available with `asc-mcp tools`.
 
-Three additions bring the public catalogue to **359 tools**:
+Seven additions bring the public catalogue to **363 tools**:
 
 - `get_app_store_version_build` reads the related selected build.
 - `set_app_store_version_build` selects a processed, eligible build by resource ID. A successful 204 response returns `{"status":"success"}`; read back the selection before retrying an uncertain write.
 - `create_screenshot_set` creates a display-specific set for an App Store version localization. Check `list_screenshot_sets` first, then use `upload_app_screenshot` to upload the image.
+- `set_app_content_rights` records the confirmed publisher declaration using AppUpdateRequest.
+- `get_app_info` reads one app info with optional `include` and `fields` (for example `primaryCategory`, `ageRatingDeclaration`).
+- `update_app_info_categories` sets `primary_category_id` and optionally `secondary_category_id` (IDs from `list_app_categories`).
+- `list_app_price_schedule_prices` lists `MANUAL` or `AUTOMATIC` prices of a schedule (`include=appPricePoint,territory`) to read back actual customer prices, such as a zero price.
+
+Repairs to existing tools: `set_app_price_schedule` now sends Apple `${price-N}` inline IDs and requires a non-empty `prices` array (a free app uses the zero-price point; an empty array is rejected).
+`list_app_store_review_attachments` takes `review_detail_id`; the legacy `version_id` remains an alias of that review-detail ID (not a version ID) and conflicting values are rejected.
+`update_age_rating_declaration` additionally accepts Apple's `advertising`, `guns_or_other_weapons`, `health_or_wellness_topics`, `kids_age_band`, `loot_box`, `messaging_and_chat`, `parental_controls`, `age_assurance`, `social_media`, `social_media_age_restricted`, `user_generated_content`, `age_rating_override_v2`, `korea_age_rating_override` and `developer_age_rating_info_url`; unknown arguments, invalid enum values and nulls are rejected.
 
 Public API failures preserve the HTTP status and bounded, sanitized Apple error
 codes, titles, details and source pointers in both text and structured content.
@@ -207,8 +215,14 @@ If `submit_app_for_review` fails after creating a draft, its error includes
 Read the existing submission and use `add_review_submission_item` or
 `submit_review_submission` to resume; do not create another draft blindly.
 An unknown write outcome requires a read-back check. Writes are never retried
-automatically. App Privacy questionnaire answers remain a manual App Store
-Connect step: no supported public API is present in the bundled Apple schema.
+automatically. App Privacy questionnaire answers have no supported public API
+in the bundled Apple schema. With the existing Apple ID reviewer session enabled,
+`get_app_privacy_details`, `declare_app_privacy_no_data`, and
+`publish_app_privacy_no_data` use the private Iris routes implemented by fastlane
+2.239.0. The write tools require `confirmation: "DATA_NOT_COLLECTED"`, refuse
+existing collection disclosures, and never delete them. A durable uncertain-write
+record blocks retries until a GET conclusively confirms the desired state.
+These routes are not covered by Apple's public API compatibility guarantees.
 
 Set the existing credential variables:
 
@@ -398,3 +412,24 @@ must be unchanged. The supplied draft ID, creator (current signed-in USER), body
 attachments and creation time are checked before the shared send path runs. Status
 returns a safe pending-draft summary with `draft_id` and `resumable`, without its body or
 creator email. No draft is recreated and an unknown send is never retried.
+
+## Session-backed App Privacy tools
+
+`get_app_privacy_details` reads the app's current disclosure and publication state
+through the same Apple ID session as the reviewer tools. `declare_app_privacy_no_data`
+and `publish_app_privacy_no_data` require `app_id` and the explicit string
+`confirmation: "DATA_NOT_COLLECTED"`. They only support no-collection declarations,
+refuse existing collection disclosures or ambiguous schemas, and never delete Apple
+records. Each mutation is sent once, followed by GET verification.
+
+A private per-app intent is saved before each write. Interrupted or unconfirmed writes
+remain `outcome_unknown` and block further mutations, including after a service restart.
+Use `get_app_privacy_details` to inspect them: reconciliation requires the same
+unchanged authentication source and a conclusively visible single no-collection
+record; publishing also requires the same publication resource with `published: true`.
+An empty or conflicting readback does not clear the intent. After the authentication
+source changes, status is still readable and reports
+`authentication_source_matches_intent: false`, but the old intent stays blocked.
+Do not delete a pending intent file or retry its mutation to resolve uncertainty.
+If saving a definitive rejection fails, the durable pending intent conservatively
+remains blocked until conclusive verification is possible.
