@@ -24,6 +24,15 @@ No Data tools still refuse collection disclosures and never delete records.
 - `last_published` and `last_published_status`: a validated RFC 3339 timestamp, or
   the fixed status `null`, `missing`, or `invalid`. The publisher email in
   `lastPublishedBy` is never returned.
+- `request_accepted`, `current_published`, `fresh_publication_verified`, and
+  `publication_basis`: distinguish a durably observed successful HTTP request,
+  the current publication flag, evidence of a new publication, and an explicit
+  acknowledgment of an already published goal. `request_accepted` is null when
+  no HTTP acceptance receipt was saved; it is never inferred from the flag.
+  A true receipt is historical evidence for the recorded request, even if the
+  current snapshot later changes. A fresh-publication claim additionally requires
+  the exact saved confirmed post-snapshot and publication checkpoint, so later
+  external timestamp changes are never attributed to the earlier request.
 
 ## Save a collection draft
 
@@ -75,20 +84,31 @@ a new digest from the verified draft, plus:
 
 All three attestations must be true. These express the publisher's authorization
 and declarations; the MCP does not decide legal compliance. Fresh GETs must match
-the exact intended matrix and snapshot before one publish PATCH. Success requires
-the same publication resource and unchanged questionnaire in the readback, plus
-an advancing validated `lastPublished` timestamp or a verified false-to-true
-publication transition with valid timestamp observations. A currently published
-baseline requires a valid timestamp. An explicit null is allowed only when the
-baseline is unpublished, for first publication; a missing or invalid attribute
-is refused before PATCH.
+the exact intended matrix and snapshot before one publish PATCH. The intent saves
+a receipt-protocol version before PATCH. After a successful bounded response, it
+records the internal HTTP 2xx status before readback; a JSON body with concrete
+errors, a different resource identity, or published=false cannot create a receipt.
+An empty 204 response is supported. Receipt-save failure never retries PATCH.
 
-The old `published: true` flag alone does not prove these answers were freshly
-published. An authorized publish call sends one PATCH even when that flag was
-already true. It skips only when an unchanged-source, matching confirmed publish
-intent proves the exact matrix, publication resource, post-snapshot and timestamp
-observation. An ambiguous PATCH cannot be reconciled by an unchanged old true
-flag. Missing, invalid or non-advancing evidence never claims fresh publication.
+A saved receipt can confirm an idempotent goal when the readback has the same
+authentication source, exact row IDs and attributes, intended matrix, publication
+resource, published=true, and a valid non-regressing `lastPublished`. An equal
+timestamp returns `request_accepted: true`, `current_published: true`, and
+`fresh_publication_verified: false`. A receipt followed by interrupted GET can
+reconcile these same conditions after restart without another PATCH.
+
+A new publication is verified only by an advancing timestamp or a false-to-true
+transition with a valid non-regressing timestamp. An explicit null is allowed
+only for the initial unpublished baseline; missing or invalid baseline attributes
+are refused before PATCH. Transport failures, 5xx, malformed JSON, or contradictory
+responses have no receipt. Their unchanged old true flag never clears the pending
+intent; reconciliation requires the stronger new-publication evidence and the
+same exact rows, resource and source.
+
+An authorized publish sends one PATCH even when the flag was already true. It
+skips only an exact confirmed post-snapshot with unchanged source/resource/matrix
+and a saved acceptance receipt, new-publication proof, or explicit goal
+acknowledgment below. An already published goal does not prove a new publication.
 
 ## Non-atomic writes and uncertainty
 
@@ -182,6 +202,38 @@ bound by the saved full snapshot digest, since a pre-POST intent cannot predict
 Apple's generated resource IDs. An identical external incomplete shape without
 this checkpoint is refused. Archive chains are bounded to 32 ancestor reads;
 corrupt, cyclic, foreign-context, or longer chains stop before further writes.
+
+## Acknowledge an unchanged legacy published goal
+
+`acknowledge_app_privacy_published_goal` sends only GETs to Apple. It requires the
+publish matrix, fresh `expected_snapshot_digest`, exact private
+`expected_intent_fingerprint`, `exclusive_editing_confirmed: true`, and:
+
+```json
+{
+  "confirmation": "ACKNOWLEDGE_CURRENT_PUBLISHED_APP_PRIVACY_GOAL",
+  "current_published_goal_acknowledged": true,
+  "answers_accurate": true,
+  "complies_with_app_store_guidelines_and_law": true,
+  "will_update_if_changed": true
+}
+```
+
+It supports only a versionless legacy pending collection publication at step 1
+of 1, with no recorded receipt or error. The original matrix, authentication
+source, exact original rows, publication resource, and full original publication
+checkpoint must match the current already-published goal. New receipt-protocol
+intents are excluded even if a crash or receipt-save failure left no receipt.
+
+The MCP archives and verifies the exact original bytes in a separate publication
+goal archive, rereads the active intent, checks another fresh snapshot, then
+atomically saves the basis `current_published_goal_acknowledged`. Archive conflict
+or failure retains the original pending intent. It returns `remote_writes: 0`,
+`request_accepted: null`, and `fresh_publication_verified: false`. This records the
+caller's acknowledgment of the current goal; it never reconstructs historical
+HTTP acceptance from an old error message, a supplied digest, or last_error=null.
+Restart and repeated publish calls can recognize only this exact confirmed goal;
+no additional PATCH is sent.
 
 ## Schema evidence and verification boundary
 

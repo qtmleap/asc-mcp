@@ -1125,6 +1125,7 @@ impl Reviewer {
             "set_app_privacy_collection"
                 | "publish_app_privacy_collection"
                 | "acknowledge_app_privacy_partial"
+                | "acknowledge_app_privacy_published_goal"
         ) {
             return self.privacy_call(name, args).await;
         }

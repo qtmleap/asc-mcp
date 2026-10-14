@@ -88,7 +88,7 @@ from this Mac use `http://127.0.0.1:8878/mcp`.
 
 The Apple ID session below means an authenticated **App Store Connect web
 session**, not this chat or an official API-key JWT. The current server exposes
-seventeen session-backed tools with a session alone (five status tools, five conversation/monitor tools, four reply/recovery tools and three App Privacy tools). It adds 365 public API tools (356 legacy and nine native additions) when
+twenty-one session-backed tools with a session alone (five status tools, five conversation/monitor tools, four reply/recovery tools and seven App Privacy tools). It adds 365 public API tools (356 legacy and nine native additions) when
 team API credentials are configured; actual access depends on Apple's role
 permissions. Having a key does not grant every tool permission.
 
@@ -232,6 +232,10 @@ publish attestations, and conservative handling of partial draft writes.
 archives and acknowledges a conclusively observed partial prefix locally. It
 does not retry writes or claim the full matrix complete. The next set is bound
 to the same original matrix, authentication source, and exact checkpoint.
+`acknowledge_app_privacy_published_goal` is a separate GET-only recovery for an
+unchanged already-published goal in a versionless legacy pending publish record.
+It archives the original bytes and records explicit goal acknowledgment, without
+claiming historical HTTP acceptance or a new publication.
 
 Set the existing credential variables:
 
@@ -542,8 +546,9 @@ its existing fields and adds `rows`, normalized `disclosures`, and `snapshot_dig
 Unsupported or mixed collection shapes remain visible as safe rows but cannot be
 edited or published by the collection tools. Full details are in
 [collection questionnaire editing](docs/privacy-collection.md).
-Collection publication additionally requires fresh `lastPublished` evidence;
-an unchanged old `published: true` flag cannot confirm a new publish or clear an
+Collection publication records a successful HTTP receipt before readback and
+distinguishes an accepted current published goal from a verified new publication;
+an unchanged old `published: true` flag alone cannot confirm a new publish or clear an
 unknown PATCH. Safe diagnostics expose only an allowlisted error kind and HTTP
 status. Original private records and their authentication generations are never
 returned through MCP.

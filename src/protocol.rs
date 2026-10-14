@@ -433,7 +433,7 @@ mod review_status_tests {
     }
 
     #[tokio::test]
-    async fn reviewer_only_server_exposes_exactly_twenty_review_tools() {
+    async fn reviewer_only_server_exposes_exactly_twenty_one_review_tools() {
         let mock = MockServer::start();
         let dir = tempfile::tempdir().unwrap();
         let server = Server {
@@ -448,11 +448,12 @@ mod review_status_tests {
             .await
             .unwrap();
         let tools = response["result"]["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 20);
+        assert_eq!(tools.len(), 21);
         for name in [
             "set_app_privacy_collection",
             "publish_app_privacy_collection",
             "acknowledge_app_privacy_partial",
+            "acknowledge_app_privacy_published_goal",
         ] {
             assert!(tools.iter().any(|t| t["name"] == name));
         }
