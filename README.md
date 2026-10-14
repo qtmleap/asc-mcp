@@ -1,10 +1,41 @@
-# asc-mcp — Rust
+# asc-mcp — App Store Connect MCP
 
-A native Rust MCP server for App Store Connect, including browser-free reviewer
-conversation monitoring. This repository derives from
-[antisynthesis/asc-mcp](https://github.com/antisynthesis/asc-mcp), whose original
-implementation was Go. The shipped server, uploads, monitor and CLI login now
-run in Rust: no Go, Ruby, Python or fastlane subprocess is required at runtime.
+A general-purpose MCP server for Apple App Store Connect: manage app metadata,
+builds, submissions, TestFlight and the other official API areas, and communicate
+with App Review from the same MCP client.
+
+This fork adds App Review conversations to
+[antisynthesis/asc-mcp](https://github.com/antisynthesis/asc-mcp). Sign in once to
+save an App Store Connect web session, then reuse it across calls and server
+restarts to check review status, read Apple's messages and explicitly send a
+reply. Cookie updates are persisted; optional macOS Keychain renewal can refresh
+expired sessions. Apple may still require verification or a new login. These are
+App Review conversations, separate from public App Store customer reviews.
+
+The shipped server, uploads, monitor and CLI login run natively in Rust. No Go,
+Ruby, Python or fastlane subprocess is required at runtime.
+
+## Differences from upstream
+
+| Area | Upstream `antisynthesis/asc-mcp` | This fork |
+| --- | --- | --- |
+| Official App Store Connect API | 356 tools covering metadata, builds, submissions, TestFlight, commerce, Game Center, reports and more | Retains those tool names and capability areas; see the compatibility notes below |
+| App Review conversations | Official API submission/review-information tools and public customer-review responses | Adds session-authenticated review status, rejection details, Apple/developer messages, update monitoring and explicit App Review replies |
+| Reviewer session | Official API authentication uses a `.p8` key, Key ID and Issuer ID | Adds native Apple Account login/import, private saved cookies and persisted cookie rotation; optional macOS Keychain renewal, with manual login when Apple requires verification |
+| Reply confirmation and recovery | No App Review conversation reply flow | Draft-then-send with context checks, durable attempt records, GET-only delivery confirmation and explicit unsent-draft recovery; no automatic reply or POST replay |
+| Implementation and distribution | Go server, Docker image, stdio and Streamable HTTP | Rust server with the same transports, a nonroot distroless HTTP sidecar, standalone/shared Compose helpers and self-hosted multi-platform image publishing |
+
+Retained tool names do not imply identical arguments or response formatting.
+This fork repairs several Apple-schema mappings, reports formerly ignored
+unsupported arguments as errors, and returns ordinary API results as JSON text
+with structured content. See the
+[public API compatibility ledger](migration/public-api-coverage.md) for the
+specific changes and offline verification.
+
+Official API tools still require team API-key credentials. Reviewer tools use a
+separate Apple Account web session and see only its current provider/team and
+accessible apps. The two credential types do not replace each other. Reviewer
+operations use undocumented Iris endpoints; reply attachments are not supported.
 
 ## Build and run
 
@@ -32,7 +63,7 @@ asc-mcp serve-http --addr :8080 --auth-tokens "$ASC_MCP_AUTH_TOKENS" \
 Non-loopback listeners require bearer tokens. Browser origins must be explicitly
 allowed. Optional native TLS uses paired `--tls-cert` / `--tls-key` flags.
 
-## Docker and shared LocalGPT stack
+## Docker deployment
 
 See [docs/docker-sidecar.md](docs/docker-sidecar.md) for the Docker sidecar details.
 
@@ -88,19 +119,20 @@ from this Mac use `http://127.0.0.1:8878/mcp`.
 
 The Apple ID session below means an authenticated **App Store Connect web
 session**, not this chat or an official API-key JWT. The current server exposes
-ten reviewer tools with a session alone (five status tools plus the five conversation/monitor tools). It adds the 356 public API tools when
+fourteen reviewer tools with a session alone (five status tools, five
+conversation/monitor tools and four reply/recovery tools). It adds the 356 public API tools when
 team API credentials are configured; actual access depends on Apple's role
 permissions. Having a key does not grant every tool permission.
 
-| Task | Credentials / environment | Current implementation and verification |
+| Task | Credentials / environment | Supported behavior and limits |
 | --- | --- | --- |
 | List App Review conversations | Apple ID session with access to the app | `list_reviewer_threads`; implemented |
 | Read Apple/developer messages, dates, rejection and attachment references | Same session | `get_reviewer_messages`; implemented; attachment file download is not implemented |
-| Check new or changed Apple replies | Same session | `check_reviewer_updates`; live read confirmed for Interceptor on 2026-10-05 |
-| Record that a checked snapshot has been reviewed | Local monitor state and exact `snapshot_token` | `acknowledge_reviewer_updates`; live workflow confirmed; changes local state only, not Apple's read status |
-| List visible apps; read versions and review submissions with raw Apple states; read the current rejection and Apple messages; check the session | Same session | Five status tools implemented and tested offline; live HTTP MCP verified on 2026-10-05 for the current provider's 10 apps, with rejection details for Interceptor and Kotatsu. Read-only, no monitor state |
+| Check new or changed Apple replies | Same session | `check_reviewer_updates`; compares messages with the saved local snapshot |
+| Record that a checked snapshot has been reviewed | Local monitor state and exact `snapshot_token` | `acknowledge_reviewer_updates`; changes local state only, not Apple's read status |
+| List visible apps; read versions and review submissions with raw Apple states; read the current rejection and Apple messages; check the session | Same session | Five read-only status tools; current provider only, no monitor state changes |
 | Inspect old reply context | Same session | `get_legacy_reviewer_context`; experimental legacy endpoint; not live verified |
-| Send a reply to App Review | Same session plus `ASC_REVIEW_ENABLE_LEGACY_REPLY=true` | `reply_reviewer_message`; experimental, disabled by default, not live verified; no reply attachments |
+| Send a reply to App Review | Same session | `reply_app_review_message` creates and sends a draft; `get_app_review_reply_status` confirms delivery by reading the new developer message. Explicit reset/resume tools handle limited unsent-draft cases. No reply attachments or automatic sending |
 | Read/update app metadata, versions and review information; upload screenshots/previews | Team `.p8`, Key ID, Issuer ID and sufficient role | Public API tools implemented and tested offline; live access pending |
 | Upload an already-built artifact, select a build, submit for review | Same team API credentials; App Manager for submission | Implemented and tested offline; live upload/submission pending |
 | Manage TestFlight, provisioning certificates/profiles, commerce, Game Center, reports and Xcode Cloud | Same team API credentials with permissions for the requested endpoint | Implemented public tools; some tasks require roles beyond App Manager; live access pending |
@@ -110,7 +142,7 @@ An API `.p8` authorizes official API calls; it is not an app-signing private key
 The current implementation uses team-key JWTs with Issuer ID. Individual API keys
 are not supported. App Manager is the intended role for app metadata, build
 selection and resubmission; finance/account administration may require different
-roles. Team keys cannot be restricted to only Interceptor. Apple's role sources
+roles. Team keys cannot be restricted to a single app. Apple's role sources
 are linked in the Docker setup above.
 
 The reviewer tools do not expose all App Store Connect features just because an
@@ -174,15 +206,25 @@ docker compose --env-file ~/.config/asc-mcp/runtime.env -p asc-mcp -f compose.ya
 A session can expire or be revoked by Apple. With Mac renewal enabled, expired
 sessions are renewed using Keychain and trusted-device cookies. Run interactive
 login when Apple requires verification or refuses stored credentials. Scheduled
-checks never prompt or request verification codes themselves. The configured 30-minute monitor only
-checks, analyses and acknowledges reviewed snapshots. It never automatically
-replies, uploads a build or submits an app.
+checks never prompt or request verification codes themselves. You can schedule
+`reviewer-check` with your own scheduler; it checks messages without sending,
+uploading a build or submitting an app. Acknowledgement remains a separate action
+after reviewing the exact snapshot.
 
-On 2026-10-05, user-completed native login and authenticated reviewer reads through
-the Rust Docker client were confirmed, including the latest Apple reply and local
-snapshot acknowledgement. This validates that account/session at that time, not
-every authentication branch, every Apple ID or future session validity. The
-public `.p8` API calls and legacy reply delivery have not been live verified.
+To stop automatic authentication, unload `work.asc-mcp.reviewer-renewal` with
+`launchctl bootout gui/$(id -u)/work.asc-mcp.reviewer-renewal` before removing the
+session source. Removing the source alone does not revoke an enrolled host
+helper: it can create a new session from Keychain. The Mac wrapper is the
+supported enrollment path on Mac; do not run a Linux login container concurrently
+against the host trust store.
+
+If the native helper binary changes, macOS may require Keychain authorization for
+its new code identity. Re-run the Mac login wrapper with `--fresh` after an
+upgrade; unattended access never opens UI. Missing provider pins require initial
+enrollment but do not invalidate a healthy reviewer session. Network,
+Keychain-access and storage interruptions use bounded retry; identity mismatches,
+refused credentials and Apple verification requirements stop repeated
+authentication.
 
 ## Official API tools
 
@@ -232,7 +274,7 @@ The CLI login implements native Apple SRP, bounded hashcash, modern two-factor
 and legacy two-step verification, and verifies an App Store Connect web session
 before saving private canonical cookies. Native login and authenticated reviewer
 reads were confirmed for this project on 2026-10-05; other authentication paths
-and reply delivery remain unverified. See [login implementation limits](docs/rust-login.md).
+remain unverified. Reply delivery was confirmed by a live read-back on 2026-10-08. See [login implementation limits](docs/rust-login.md).
 
 Reviewer-only MCP requires `ASC_REVIEW_COOKIE_PATH` (or the default private
 session). It does not require official API-key credentials. Optional tools:
@@ -249,6 +291,10 @@ session). It does not require official API-key credentials. Optional tools:
 | `get_all_app_review_statuses` | The same for every visible app; partial results say `complete: false` |
 | `get_app_rejection_details` | Current rejection and its latest linked submission's Apple messages |
 | `get_review_connection_status` | Session check for the current provider (no identity) |
+| `reply_app_review_message` | Explicitly create and send a reply after validating the expected Apple message and thread context |
+| `get_app_review_reply_status` | Confirm delivery with GET-only read-back; inspect pending or uncertain attempts |
+| `reset_rejected_app_review_reply` | Explicitly reset a definitively rejected draft-creation record after remote checks; no send |
+| `resume_unsent_app_review_reply` | Explicitly send an unchanged, owned, attachment-free draft with no previous send attempt |
 
 The five status tools are read-only: no login, POST, team switch, or monitor
 state/lock write. Limits: they see only the provider of the current session;
@@ -257,18 +303,59 @@ submission is not approval; when the latest submission cannot be identified the
 result is `unknown`/`complete: false`, never "no issues". See
 [reviewer monitoring](docs/rust-reviewer.md#review-status-tools).
 
-`reply_reviewer_message` remains **experimental and disabled by default**;
+`reply_app_review_message` replies through the two-step flow the App Store Connect
+web frontend uses (request shapes taken from its published JavaScript bundle
+<https://appstoreconnect.apple.com/access/m-appstore/static/js/main.a52d4a9ea996a295dcaa.js>,
+not from Apple documentation): `POST
+/iris/v1/resolutionCenterDraftMessages`, then `POST /iris/v1/resolutionCenterMessages`
+with `createFromDraftMessage`. It first verifies app → submission → thread membership,
+`canDeveloperAddNote`, that `expected_apple_message_id` is still Apple's newest message,
+and that no draft or identical developer message exists. It re-checks context and
+then reads the draft again immediately before sending. External edits cannot be
+locked atomically across Apple's GET and POST requests. The whole operation is bound to one session source
+generation; a replaced source stops it before any further request
+(`reviewer_session_changed`). POSTs are never retried or replayed. A durable
+private per-thread record is written before each POST; any unfinished or uncertain
+attempt (`delivery_unknown`) blocks all later sends on that thread, including restarts and
+different bodies, until a person inspects the thread in App Store Connect. The record is
+never removed automatically. `get_app_review_reply_status` uses GET requests only and
+may mark an attempt delivered when a new developer message with the same body appears.
+Nothing is claimed as delivered without that read-back. On 2026-10-08, an explicitly
+resumed draft was delivered and confirmed through the status tool. Apple returned a
+non-JSON send response; the client did not retry the POST and confirmed delivery with GET.
+
+The legacy `reply_reviewer_message` remains **experimental, disabled by default and unverified (its route returned 404)**;
 `ASC_REVIEW_ENABLE_LEGACY_REPLY=true` exposes the old reply route for explicit
 validation. A request accepted by Apple is not a read-back delivery confirmation.
 Reply attachments are not implemented. Neither checks nor acknowledgements send
 messages or submit an app.
 
-On this project's Mac setup, private cookies, snapshots and state live under
+By default on native runs, private cookies, snapshots and state live under
 `~/Library/Application Support/ASC MCP/`, outside Git. Files use mode
 600 and the directory mode 700. An OS lock excludes concurrent monitors and
 releases on process exit. Acknowledgements require a snapshot token so a newer,
 unread message cannot be marked seen accidentally. Details:
 [reviewer monitoring](docs/rust-reviewer.md).
+
+Reply status distinguishes `not_attempted`, `not_sent` (no message-send POST was
+made), `delivery_unknown`, and `delivered`. `reset_rejected_app_review_reply`
+accepts the same `app_id`, `review_submission_id`, and `thread_id` as the status
+tool. It only resets a local `draft_rejected` attempt after GET checks confirm
+there is no remote draft or matching developer message. It preserves the local
+record as `reset`, makes no Apple mutation, and does not resend. It cannot reset
+an interrupted draft creation or an unknown send. After a reset, a separate,
+explicitly requested reply call performs all preflight checks again. Existing
+remote drafts are never modified or deleted.
+
+`resume_unsent_app_review_reply` adds `draft_id` to the original reply's arguments.
+It is an explicit first-send operation for a verified draft when create-response
+validation was interrupted, or for a draft left unsent. It cannot resume any
+`send_attempted`, `accepted`, or `delivered` record. The original target, expected
+Apple message and body must be unchanged. The supplied draft ID, creator (current
+signed-in USER), body, empty attachments and creation time are checked before the
+shared send path runs. Status returns a safe pending-draft summary with `draft_id`
+and `resumable`, without its body or creator email. No draft is recreated and an
+unknown send is never retried.
 
 ## CI and deployment
 
@@ -293,7 +380,7 @@ unread message cannot be marked seen accidentally. Details:
 
 GHCR authentication uses GitHub Actions' `GITHUB_TOKEN` with `packages: write`;
 no Apple API keys, Apple ID sessions or signing credentials are needed for CI/CD.
-This deployment distributes the MCP image; it does not deploy Interceptor to
+This deployment distributes the MCP image; it does not deploy your app to
 App Store Connect or replace running local containers automatically.
 
 ## Migration verification
@@ -335,7 +422,3 @@ cookies or passwords in MCP tool arguments or Git.
 
 MIT. The original tool definitions and behaviour are derived from the upstream
 Go project; its licence is retained in [LICENSE](LICENSE).
-
-To stop automatic authentication, unload `work.asc-mcp.reviewer-renewal` with `launchctl bootout gui/$(id -u)/work.asc-mcp.reviewer-renewal` before removing the session source. Removing the source alone does not revoke an enrolled host helper: it can create a new session from Keychain. The Mac wrapper is the supported enrollment path on Mac; do not run a Linux login container concurrently against the host trust store.
-
-If the native helper binary changes, macOS may require Keychain authorization for its new code identity. Re-run the Mac login wrapper with `--fresh` after an upgrade; unattended access never opens UI. Missing provider pins require this initial enrollment but do not invalidate an already healthy reviewer session. Network, Keychain-access and storage interruptions use bounded retry; identity mismatches, refused credentials and Apple verification requirements stop repeated authentication.

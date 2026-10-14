@@ -27,6 +27,9 @@ mod fs_safe;
 mod recovery_tests;
 #[cfg(test)]
 mod refresh_tests;
+mod reply;
+#[cfg(test)]
+mod reply_tests;
 mod session;
 mod status;
 
@@ -450,6 +453,71 @@ fn redact_cookie_values(value: &mut Value, cookies: &[Cookie]) {
     }
 }
 
+const SESSION_CHANGED: &str = "reviewer_session_changed: the authentication source changed during this operation; nothing further was sent";
+
+/// Unredacted response. Callers must redact before anything reaches a tool result.
+struct Raw {
+    data: Value,
+    headers: HeaderMap,
+    cookies: Vec<Cookie>,
+}
+
+/// One authentication source generation for a whole mutating operation. Overlay cookie
+/// rotation within the generation is allowed; a replaced source fails closed.
+struct Pinned {
+    generation: String,
+    /// Cookie values sent or received during the operation, for public-output checks.
+    secrets: std::sync::Mutex<Vec<String>>,
+}
+impl Pinned {
+    fn remember(&self, cookies: &[Cookie]) {
+        let mut secrets = self.secrets.lock().unwrap_or_else(|e| e.into_inner());
+        for cookie in cookies.iter().filter(|c| !c.value.is_empty()) {
+            if !secrets.contains(&cookie.value) && secrets.len() < 512 {
+                secrets.push(cookie.value.clone());
+            }
+        }
+    }
+    /// Whether a response-derived string may appear in a tool result or record, applying
+    /// the same matching as response redaction (`[redacted]` is never a valid identifier).
+    fn public(&self, text: &str) -> bool {
+        let secrets = self.secrets.lock().unwrap_or_else(|e| e.into_inner());
+        !secrets
+            .iter()
+            .any(|s| text == s.as_str() || (s.len() >= 8 && text.contains(s.as_str())))
+    }
+}
+
+/// Keep the original `filter[...]` scope on a pagination link. A missing filter is
+/// re-added; a changed, duplicated or new filter is refused.
+fn scoped_next(mut next: Url, first: &Url) -> Result<Url> {
+    let scope = |u: &Url| -> Vec<(String, String)> {
+        u.query_pairs()
+            .filter(|(k, _)| k.starts_with("filter["))
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect()
+    };
+    let original = scope(first);
+    let found = scope(&next);
+    if found
+        .iter()
+        .any(|(k, _)| !original.iter().any(|(o, _)| o == k))
+    {
+        bail!("reviewer_unsafe_pagination_url");
+    }
+    for (key, value) in &original {
+        let values: Vec<_> = found.iter().filter(|(k, _)| k == key).collect();
+        match values.as_slice() {
+            [] => {
+                next.query_pairs_mut().append_pair(key, value);
+            }
+            [(_, v)] if v == value => (),
+            _ => bail!("reviewer_unsafe_pagination_url"),
+        }
+    }
+    Ok(next)
+}
+
 struct MonitorLock(fs::File);
 impl MonitorLock {
     fn acquire(root: &Path) -> Result<Self> {
@@ -565,6 +633,30 @@ impl Reviewer {
                 false,
             ),
         ];
+        ops.push((
+            "reply_app_review_message",
+            "Reply to App Review through the modern Iris two-step draft/send flow. Never retries a POST; an uncertain result is delivery_unknown and blocks further sends on the thread until inspected.",
+            vec!["app_id", "review_submission_id", "thread_id", "expected_apple_message_id", "message"],
+            false,
+        ));
+        ops.push((
+            "get_app_review_reply_status",
+            "Check a previous reply attempt with GET requests only. May update the local reply record once delivery is confirmed. Never sends.",
+            vec!["app_id", "review_submission_id", "thread_id"],
+            false,
+        ));
+        ops.push((
+            "reset_rejected_app_review_reply",
+            "Explicitly reset local state after a definitive draft-creation rejection. Requires no remote draft or matching message. Never sends, patches or deletes Apple data; unknown sends cannot be reset.",
+            vec!["app_id", "review_submission_id", "thread_id"],
+            false,
+        ));
+        ops.push((
+            "resume_unsent_app_review_reply",
+            "Explicitly send an owned, verified pending draft with the unchanged original request. Requires caller-supplied draft_id, creator/body/time proof and no prior send attempt. Never recreates a draft or retries an unknown send.",
+            vec!["app_id", "review_submission_id", "thread_id", "expected_apple_message_id", "message", "draft_id"],
+            false,
+        ));
         if self.legacy_reply {
             ops.push(("reply_reviewer_message", "EXPERIMENTAL unverified legacy reply. Sends once, never retries; read back accepted_unverified before claiming delivery.", vec!["app_id", "platform", "thread_id", "sender", "message"], false));
         }
@@ -688,6 +780,72 @@ impl Reviewer {
         payload: Option<Value>,
         csrf: Option<&HeaderMap>,
     ) -> Result<(Value, HeaderMap)> {
+        self.request_mode(method, url, payload, csrf, false).await
+    }
+
+    /// `iris` selects the JSON:API headers used by the App Store Connect web frontend for
+    /// `/iris/v1` writes. It never changes the legacy transport headers.
+    async fn request_mode(
+        &self,
+        method: Method,
+        url: Url,
+        payload: Option<Value>,
+        csrf: Option<&HeaderMap>,
+        iris: bool,
+    ) -> Result<(Value, HeaderMap)> {
+        let mut raw = self.fetch(method, url, payload, csrf, iris, None).await?;
+        redact(&mut raw.data);
+        redact_cookie_values(&mut raw.data, &raw.cookies);
+        Ok((raw.data, raw.headers))
+    }
+
+    /// Generation of the current authentication source, used to bind one mutating operation.
+    async fn pin(&self) -> Result<Pinned> {
+        let snapshot = session::load(self.cookie_path.clone(), self.root.clone()).await?;
+        cookie_header(&snapshot.cookies)?;
+        let pin = Pinned {
+            generation: snapshot.generation,
+            secrets: std::sync::Mutex::new(Vec::new()),
+        };
+        pin.remember(&snapshot.cookies);
+        Ok(pin)
+    }
+
+    /// Local check only; never makes a request.
+    async fn check_pin(&self, pin: &Pinned) -> Result<()> {
+        let snapshot = session::load(self.cookie_path.clone(), self.root.clone()).await?;
+        if snapshot.generation != pin.generation {
+            bail!("{SESSION_CHANGED}");
+        }
+        Ok(())
+    }
+
+    /// Unredacted request bound to the pinned generation, without auth recovery or replay.
+    /// The raw body is for private integrity checks only and must never be returned publicly.
+    async fn pinned(
+        &self,
+        pin: &Pinned,
+        method: Method,
+        url: Url,
+        payload: Option<Value>,
+        iris: bool,
+    ) -> Result<(Value, HeaderMap)> {
+        let raw = self
+            .fetch(method, url, payload, None, iris, Some(&pin.generation))
+            .await?;
+        pin.remember(&raw.cookies);
+        Ok((raw.data, raw.headers))
+    }
+
+    async fn fetch(
+        &self,
+        method: Method,
+        url: Url,
+        payload: Option<Value>,
+        csrf: Option<&HeaderMap>,
+        iris: bool,
+        pin: Option<&str>,
+    ) -> Result<Raw> {
         if url.origin() != self.origin.origin()
             || !url.username().is_empty()
             || url.password().is_some()
@@ -695,17 +853,34 @@ impl Reviewer {
             bail!("reviewer_untrusted_origin");
         }
         let snapshot = session::load(self.cookie_path.clone(), self.root.clone()).await?;
+        // Fails before sending: a replaced source must never continue a pinned operation.
+        if pin.is_some_and(|generation| generation != snapshot.generation) {
+            bail!("{SESSION_CHANGED}");
+        }
         let cookies = &snapshot.cookies;
         let mut cookie = reqwest::header::HeaderValue::from_str(&cookie_header(cookies)?)
             .map_err(|_| anyhow::anyhow!("reviewer_session_invalid"))?;
         cookie.set_sensitive(true);
         let post = method == Method::POST;
+        let media = if iris {
+            "application/vnd.api+json"
+        } else {
+            "application/json"
+        };
         let mut builder = self
             .client
             .request(method, url.clone())
             .header("Cookie", cookie)
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json");
+            .header("Accept", media)
+            .header("Content-Type", media);
+        if iris {
+            builder = builder.header("X-Csrf-Itc", "[asc-ui]");
+            if post {
+                builder = builder
+                    .header("Origin", self.origin.origin().ascii_serialization())
+                    .header("Referer", self.origin.as_str());
+            }
+        }
         if let Some(value) = payload {
             builder = builder.json(&value);
         }
@@ -784,6 +959,12 @@ impl Reviewer {
         }
         let mut headers = response.headers().clone();
         headers.remove(reqwest::header::SET_COOKIE);
+        if iris && post {
+            headers.insert(
+                "x-asc-mcp-status",
+                reqwest::header::HeaderValue::from_str(status.as_str()).unwrap(),
+            );
+        }
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| {
             anyhow::anyhow!(if post {
@@ -804,16 +985,25 @@ impl Reviewer {
             }
             bytes.extend_from_slice(&chunk);
         }
-        let mut data = serde_json::from_slice(&bytes).map_err(|_| {
+        if iris && post && bytes.is_empty() {
+            return Ok(Raw {
+                data: json!({"data":null}),
+                headers,
+                cookies: redaction_cookies,
+            });
+        }
+        let data = serde_json::from_slice(&bytes).map_err(|_| {
             anyhow::anyhow!(if post {
                 "delivery_unknown: invalid JSON response"
             } else {
                 "reviewer_response_invalid: expected JSON"
             })
         })?;
-        redact(&mut data);
-        redact_cookie_values(&mut data, &redaction_cookies);
-        Ok((data, headers))
+        Ok(Raw {
+            data,
+            headers,
+            cookies: redaction_cookies,
+        })
     }
     fn url(&self, path: &str, query: &[(&str, &str)]) -> Result<Url> {
         let mut url = self.origin.join(path)?;
@@ -821,7 +1011,17 @@ impl Reviewer {
         Ok(url)
     }
     async fn pages(&self, path: &str, query: &[(&str, &str)]) -> Result<Value> {
-        let mut url = self.url(path, query)?;
+        self.pages_with(path, query, None).await
+    }
+    /// With `pin`, every page is an unredacted request bound to that session generation.
+    async fn pages_with(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        pin: Option<&Pinned>,
+    ) -> Result<Value> {
+        let first = self.url(path, query)?;
+        let mut url = first.clone();
         let mut visited = HashSet::new();
         let mut data = Vec::new();
         let mut included = Vec::new();
@@ -829,7 +1029,13 @@ impl Reviewer {
             if !visited.insert(url.as_str().to_owned()) {
                 bail!("reviewer_pagination_cycle");
             }
-            let (response, _) = self.request(Method::GET, url.clone(), None, None).await?;
+            let (response, _) = match pin {
+                Some(pin) => {
+                    self.pinned(pin, Method::GET, url.clone(), None, false)
+                        .await?
+                }
+                None => self.request(Method::GET, url.clone(), None, None).await?,
+            };
             data.extend(
                 response
                     .get("data")
@@ -866,7 +1072,7 @@ impl Reviewer {
                     {
                         bail!("reviewer_unsafe_pagination_url");
                     }
-                    url = candidate;
+                    url = scoped_next(candidate, &first)?;
                 }
                 _ => bail!("reviewer_unsafe_pagination_url"),
             }
@@ -952,6 +1158,10 @@ impl Reviewer {
                 }
                 Ok(value)
             }
+            "reply_app_review_message" => self.reply_modern(args).await,
+            "get_app_review_reply_status" => self.reply_status(args).await,
+            "reset_rejected_app_review_reply" => self.reset_rejected_reply(args).await,
+            "resume_unsent_app_review_reply" => self.resume_unsent_reply(args).await,
             "reply_reviewer_message" if self.legacy_reply => self.reply(args).await,
             _ => bail!("unknown reviewer tool"),
         }
