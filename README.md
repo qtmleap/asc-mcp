@@ -218,11 +218,16 @@ An unknown write outcome requires a read-back check. Writes are never retried
 automatically. App Privacy questionnaire answers have no supported public API
 in the bundled Apple schema. With the existing Apple ID reviewer session enabled,
 `get_app_privacy_details`, `declare_app_privacy_no_data`, and
-`publish_app_privacy_no_data` use the private Iris routes implemented by fastlane
-2.239.0. The write tools require `confirmation: "DATA_NOT_COLLECTED"`, refuse
+`publish_app_privacy_no_data`, `set_app_privacy_collection`, and
+`publish_app_privacy_collection` use the private Iris routes implemented by fastlane
+2.239.0. The No Data write tools require `confirmation: "DATA_NOT_COLLECTED"`, refuse
 existing collection disclosures, and never delete them. A durable uncertain-write
 record blocks retries until a GET conclusively confirms the desired state.
 These routes are not covered by Apple's public API compatibility guarantees.
+The collection tools replace or publish an explicit complete disclosure matrix,
+with a fresh exact snapshot digest and separate confirmation. See
+[collection questionnaire editing](docs/privacy-collection.md) for the schemas,
+publish attestations, and conservative handling of partial draft writes.
 
 Set the existing credential variables:
 
@@ -527,5 +532,11 @@ An empty or conflicting readback does not clear the intent. After the authentica
 source changes, status is still readable and reports
 `authentication_source_matches_intent: false`, but the old intent stays blocked.
 Do not delete a pending intent file or retry its mutation to resolve uncertainty.
+The same private lock and intent record protect collection edits and publication:
+an uncertain collection write also blocks the No Data tools. The read tool retains
+its existing fields and adds `rows`, normalized `disclosures`, and `snapshot_digest`.
+Unsupported or mixed collection shapes remain visible as safe rows but cannot be
+edited or published by the collection tools. Full details are in
+[collection questionnaire editing](docs/privacy-collection.md).
 If saving a definitive rejection fails, the durable pending intent conservatively
 remains blocked until conclusive verification is possible.
