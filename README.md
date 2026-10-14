@@ -83,8 +83,8 @@ contains only Cargo manifests, Rust source and embedded runtime data.
 # Start/rebuild only this service without restarting other development services
 ./script/docker/compose.sh stack up -d --build asc-mcp
 
-# Codex stdio MCP uses the same running container, credentials and state.
-codex mcp add asc-review -- /absolute/path/asc-mcp/script/docker/mcp.sh
+# Codex stdio MCP for the running shared LocalGPT stack.
+codex mcp add asc-review -- "$PWD/script/docker/mcp.sh"
 ```
 
 The helper creates `~/.config/asc-mcp/runtime.env` with a random HTTP bearer token
@@ -153,78 +153,48 @@ The `.p8` does not replace reviewer-session authentication.
 
 ### Session setup and renewal
 
-The generic private directory is `Library/Application Support/ASC MCP` beneath
-HOME. If it is absent and the old `InterceptorReview` directory exists, the
-whole legacy directory remains in use; no credentials or state are copied or
-mixed automatically. To migrate, stop all service/login/check processes and move
-the whole directory to `ASC MCP` (never merge two directories). In Docker this
-is beneath `~/.config/asc-mcp/state`; native runs use HOME. The host credentials
-and login-trust bind directories keep their existing generic `asc-mcp` names.
-Set `ASC_REVIEW_APP_ID` explicitly for reply monitoring; no app is selected by
-default. Session/status and per-app tools remain available without a monitor ID.
-
-
-Use your primary Apple Account email. Interactive login remembers the confirmed account and App Store Connect provider in private host-only storage. On macOS it saves the confirmed password in Keychain through native APIs and later reuses it. Passwords and codes never appear in argv, environment variables, files or MCP output. `--fresh` bypasses preflight and requests a replacement password; use it for initial enrollment or a stale password. `--accept-provider-change` explicitly permits a different confirmed Apple team; unattended renewal never changes the pinned team.
-
-For macOS Docker installations, install the stable native helper once:
+Run these commands from the repository root in an interactive terminal.
+On macOS, install the native login/renewal helper once:
 
 ```sh
 cargo build --release --locked
 ./script/macos/install-renewal-agent.sh --binary "$PWD/target/release/asc-mcp"
-./script/docker/reviewer-login.sh stack --fresh
-ASC_REVIEW_RENEWAL_WAIT_SECS=30 ./script/docker/compose.sh stack up -d --build asc-mcp
 ```
 
-The first interactive login enrolls the account/password and handles any Apple verification. The host LaunchAgent checks the effective session every 15 minutes and wakes when a reviewer GET encounters authentication failure. It owns Keychain and the separate `credentials-login` trust directory. The container receives only confirmed ASC cookies and sanitized renewal status. Verification requirements, rejected credentials and team changes stop repeated attempts until successful human login. Locked/unavailable Keychain access also returns a user-action state without opening unattended UI.
-
-The service retries GET once, waiting at most 30 seconds; POST is never replayed. Enable recovery persistently by adding `ASC_REVIEW_RENEWAL_WAIT_SECS=30` to private `runtime.env` and recreating only `asc-mcp`. Recovery is disabled by default without a host agent. Linux retains manual Docker login and remembered account, without password storage or unattended renewal.
-
-`ASC_REVIEW_COOKIE_PATH` is both the session source and confirmed-login destination. `ASC_REVIEW_TRUST_ROOT` selects the separate login-only directory. The Mac helper maps existing Docker paths to their host counterparts, preserving legacy state-directory selection. A changed source generation invalidates older cookie overlays. Passwords and login trust are never mounted into the running service.
-
-`ASC_REVIEW_STATE_ROOT` selects the overlay/lock directory shared with the service
-(default: the private root). To run the container yourself from this repository (run `./script/docker/setup.sh` once to create the private directories):
+Then log in on macOS or Linux:
 
 ```sh
-asc_state_name='ASC MCP'
-asc_state_base="$HOME/.config/asc-mcp/state/Library/Application Support"
-if [ ! -e "$asc_state_base/ASC MCP" ] && [ ! -L "$asc_state_base/ASC MCP" ] &&
-   { [ -e "$asc_state_base/InterceptorReview" ] || [ -L "$asc_state_base/InterceptorReview" ]; }; then
-  asc_state_name='InterceptorReview'
-fi
-asc_state_root="/state/Library/Application Support/$asc_state_name"
-asc_configured_root=$(sed -n 's/^[[:space:]]*ASC_REVIEW_STATE_ROOT=//p' "$HOME/.config/asc-mcp/runtime.env" | tail -n 1)
-if [ -n "$asc_configured_root" ]; then asc_state_root=$asc_configured_root; fi
-docker compose --env-file ~/.config/asc-mcp/runtime.env -p asc-mcp -f compose.yaml run --rm --no-deps \
-  --env HOME=/login-home \
-  --env "ASC_REVIEW_STATE_ROOT=$asc_state_root" \
-  --env ASC_REVIEW_TRUST_ROOT=/login-trust \
-  --volume ~/.config/asc-mcp/credentials:'/login-home/Library/Application Support/ASC MCP':rw \
-  --volume ~/.config/asc-mcp/credentials-login:/login-trust:rw \
-  asc-mcp reviewer-login
+./script/docker/reviewer-login.sh standalone --fresh
 ```
 
-A session can expire or be revoked by Apple. With Mac renewal enabled, expired
-sessions are renewed using Keychain and trusted-device cookies. Run interactive
-login when Apple requires verification or refuses stored credentials. Scheduled
-checks never prompt or request verification codes themselves. You can schedule
-`reviewer-check` with your own scheduler; it checks messages without sending,
-uploading a build or submitting an app. Acknowledgement remains a separate action
-after reviewing the exact snapshot.
+Use `stack` instead of `standalone` for the shared LocalGPT stack. The helper
+configures private session storage and reuses your saved account and provider.
+On macOS it uses the native helper and Keychain; on Linux it runs a disposable
+login container. Later logins can omit `--fresh`; use it again to replace a stale
+password. Passwords and verification codes are entered only in the terminal.
 
-To stop automatic authentication, unload `work.asc-mcp.reviewer-renewal` with
-`launchctl bootout gui/$(id -u)/work.asc-mcp.reviewer-renewal` before removing the
-session source. Removing the source alone does not revoke an enrolled host
-helper: it can create a new session from Keychain. The Mac wrapper is the
-supported enrollment path on Mac; do not run a Linux login container concurrently
-against the host trust store.
+The macOS agent checks the session every 15 minutes. To let the Docker service
+wait for renewal after a failed GET, add this to private
+`~/.config/asc-mcp/runtime.env`:
 
-If the native helper binary changes, macOS may require Keychain authorization for
-its new code identity. Re-run the Mac login wrapper with `--fresh` after an
-upgrade; unattended access never opens UI. Missing provider pins require initial
-enrollment but do not invalidate a healthy reviewer session. Network,
-Keychain-access and storage interruptions use bounded retry; identity mismatches,
-refused credentials and Apple verification requirements stop repeated
-authentication.
+```dotenv
+ASC_REVIEW_RENEWAL_WAIT_SECS=30
+```
+
+Then recreate the service with the same deployment mode:
+
+```sh
+./script/docker/compose.sh standalone up -d --force-recreate asc-mcp
+```
+
+Apple may still require interactive verification. Linux uses manual login;
+POSTs are never replayed. Set `ASC_REVIEW_APP_ID` only when using message
+monitoring; per-app status and reply tools take their own app IDs.
+
+See [Docker login and renewal](docs/docker-sidecar.md#log-in-or-renew-the-reviewer-session)
+for custom paths, private storage, provider changes and how to stop the agent.
+The scripts handle existing legacy storage automatically; there is no need to
+assemble the Docker mounts or state-path selection by hand.
 
 ## Official API tools
 
@@ -408,13 +378,21 @@ reference material, not current implementation instructions.
 
 ## MCP setup
 
+For a native setup, build the binary above and run from the repository root:
+
 ```sh
-codex mcp add asc-review \
-  --env 'ASC_REVIEW_COOKIE_PATH=/private/path/session.cookie' \
-  -- /absolute/path/asc-mcp serve
+./target/release/asc-mcp reviewer-login
+codex mcp add asc-review -- "$PWD/target/release/asc-mcp" serve
 ```
 
-For the official API tools, also configure the three API credential variables.
+This uses the native binary's own saved session; the Docker renewal agent does
+not renew that default native session. For the shared LocalGPT stack, use the
+Docker MCP registration shown above. Standalone Docker clients connect to
+`http://127.0.0.1:8878/mcp` with the bearer token from private `runtime.env`.
+
+For a custom native session location, configure `ASC_REVIEW_COOKIE_PATH`.
+For the official API tools, also configure
+the three API credential variables.
 See [SETUP.md](SETUP.md) and `config/config.sample.env`. Never put private keys,
 cookies or passwords in MCP tool arguments or Git.
 

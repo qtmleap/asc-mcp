@@ -76,6 +76,34 @@ Required verification, rejected credentials, unavailable Keychain access and tea
 
 Linux retains `./script/docker/reviewer-login.sh stack` (or `standalone`) in a disposable interactive login container. It remembers the account but does not store passwords or renew unattended. Confirmed login writes the configured cookie source, reloaded without restart. Failed authentication does not replace the source.
 
+Pass `--accept-provider-change` to the login helper only when intentionally
+changing the confirmed Apple team. Unattended renewal never changes the pinned
+provider.
+
+### Stop or upgrade the macOS helper
+
+To stop automatic authentication, unload `work.asc-mcp.reviewer-renewal` with `launchctl bootout gui/$(id -u)/work.asc-mcp.reviewer-renewal` before removing the session source. Removing the source alone does not revoke an enrolled host helper: it can create a new session from Keychain. The Mac wrapper is the supported enrollment path on Mac; do not run a Linux login container concurrently against the host trust store.
+
+If the native helper binary changes, macOS may require Keychain authorization for its new code identity. Re-run the Mac login wrapper with `--fresh` after an upgrade; unattended access never opens UI. Missing provider pins require this initial enrollment but do not invalidate an already healthy reviewer session. Network, Keychain-access and storage interruptions use bounded retry; identity mismatches, refused credentials and Apple verification requirements stop repeated authentication.
+
+### Session paths
+
+`ASC_MCP_CONFIG_DIR` selects the host configuration directory (default
+`~/.config/asc-mcp`). The helpers use `credentials/session.cookie` as the session
+source, `credentials-login/` for login-only trusted-device cookies, and
+`state/Library/Application Support/ASC MCP/` for the shared overlay and locks.
+The service never receives passwords or the login-only trust directory.
+
+Set `ASC_REVIEW_STATE_ROOT` in private `runtime.env` to override the container
+state path beneath `/state/`; the macOS helper maps it to the corresponding host
+path. Native runs outside these Docker helpers use their own private directory
+under `~/Library/Application Support/ASC MCP/`, unless explicitly configured.
+
+If the default state directory is absent but the legacy `InterceptorReview`
+directory exists, the helpers keep using the whole legacy directory. No state or
+credentials are merged automatically. To migrate, stop service, login and check
+processes, then move the whole legacy directory to `ASC MCP`.
+
 A bare `docker run` with the image's default command must supply
 `ASC_MCP_AUTH_TOKENS`; without it the non-loopback HTTP listener refuses to
 start. Browser clients also require explicitly configured allowed origins.
@@ -96,7 +124,3 @@ The Docker CI smoke test starts the image without stdin, checks `/healthz`,
 checks that unauthenticated MCP is denied, and performs an authenticated MCP
 initialize request. The distroless runtime has no shell or curl; these probes
 run from the host or client container.
-
-To stop automatic authentication, unload `work.asc-mcp.reviewer-renewal` with `launchctl bootout gui/$(id -u)/work.asc-mcp.reviewer-renewal` before removing the session source. Removing the source alone does not revoke an enrolled host helper: it can create a new session from Keychain. The Mac wrapper is the supported enrollment path on Mac; do not run a Linux login container concurrently against the host trust store.
-
-If the native helper binary changes, macOS may require Keychain authorization for its new code identity. Re-run the Mac login wrapper with `--fresh` after an upgrade; unattended access never opens UI. Missing provider pins require this initial enrollment but do not invalidate an already healthy reviewer session. Network, Keychain-access and storage interruptions use bounded retry; identity mismatches, refused credentials and Apple verification requirements stop repeated authentication.
