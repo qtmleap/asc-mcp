@@ -78,6 +78,9 @@ pub fn catalogue() -> &'static Vec<Value> {
             let name=tool["name"].as_str().unwrap().to_owned();
             let properties=tool["inputSchema"]["properties"].as_object_mut().unwrap();
             if let Some(fields)=actual[&name].as_object() {for (key,property) in fields {properties.entry(key.clone()).or_insert_with(||property.clone());}}
+            if name=="get_beta_build_usage_metrics" {
+                properties.get_mut("limit").unwrap()["description"]=json!("Omit limit. Apple only accepts it with grouping or filters, which this tool does not expose; positive values are rejected before making a request.");
+            }
             if name=="update_age_rating_declaration" {
                 let properties=tool["inputSchema"]["properties"].as_object_mut().unwrap();
                 for (arg,apple,kind) in AGE_RATING_EXTRA {
@@ -188,12 +191,12 @@ mod tests {
     use super::*;
     #[test]
     fn exact_exported_catalogue() {
-        assert_eq!(tools().len(), 363);
+        assert_eq!(tools().len(), 365);
         let names: std::collections::HashSet<_> = catalogue()
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
-        assert_eq!(names.len(), 363);
+        assert_eq!(names.len(), 365);
         assert!(
             find("list_apps").unwrap()["annotations"]["readOnlyHint"]
                 .as_bool()

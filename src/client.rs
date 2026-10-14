@@ -90,6 +90,10 @@ impl ApiClient {
             auth: Arc::new(Auth::Offline),
         })
     }
+    /// The loopback origin of an offline client; `None` for real API clients.
+    pub(crate) fn offline_origin(&self) -> Option<&Url> {
+        matches!(&*self.auth, Auth::Offline).then_some(&self.origin)
+    }
     fn http() -> Result<reqwest::Client> {
         Ok(reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())

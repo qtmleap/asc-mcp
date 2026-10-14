@@ -579,6 +579,16 @@ pub fn prepare_request(name: &str, args: &Value) -> Result<ApiRequest> {
 /// Advertised arguments that the legacy implementation ignored are rejected
 /// explicitly rather than reporting a successful mutation of the wrong fields.
 pub fn validate_supported_arguments(name: &str, args: &Value) -> Result<()> {
+    if name == "get_beta_build_usage_metrics"
+        && args
+            .get("limit")
+            .and_then(Value::as_u64)
+            .is_some_and(|n| n > 0)
+    {
+        bail!(
+            "get_beta_build_usage_metrics: limit requires grouping or filters that this tool does not expose; omit limit"
+        )
+    }
     let recipe = recipes()
         .get(name)
         .with_context(|| format!("unknown tool: {name}"))?;

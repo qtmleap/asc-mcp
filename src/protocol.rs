@@ -84,6 +84,9 @@ impl Server {
             .api
             .as_ref()
             .ok_or_else(|| anyhow!("public API credentials are not configured"))?;
+        if let Some(value) = crate::analytics::handle(client, name, args).await? {
+            return Ok(value);
+        }
         if let Some(value) = uploads::handle(client, name, args).await? {
             return Ok(value);
         }
@@ -310,7 +313,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(value["result"]["tools"].as_array().unwrap().len(), 363);
+        assert_eq!(value["result"]["tools"].as_array().unwrap().len(), 365);
         assert!(
             s.dispatch(
                 &json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
