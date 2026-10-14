@@ -12,7 +12,7 @@
 //! returned; only fixed codes and identifiers that are not credentials leave this module.
 use super::*;
 
-const RECORD_MAX: usize = 64 * 1024;
+const RECORD_MAX: usize = super::MAX_BODY;
 const BODY_UNITS: usize = 4000;
 const ID_MAX: usize = 128;
 
@@ -634,18 +634,24 @@ impl Reviewer {
             .draft_data(pin, &tid)
             .await
             .map_err(|e| unsent(code(&e)))?;
-        let attachments = current.pointer("/relationships/resolutionCenterMessageAttachments/data");
-        let clean = current["id"] == draft_id.as_str()
-            && current
-                .pointer("/attributes/messageBody")
-                .and_then(Value::as_str)
-                .is_some_and(|b| body_hash(b) == record.body_hash)
-            && attachments.is_some_and(|a| a.as_array().is_some_and(Vec::is_empty));
-        if !clean {
-            return Err(unsent(
-                "reviewer_reply_draft_conflict: draft read-back differs from the request".into(),
-            ));
-        }
+        let validate_current = |current: &Value| {
+            let attachments =
+                current.pointer("/relationships/resolutionCenterMessageAttachments/data");
+            let clean = current["id"] == draft_id.as_str()
+                && current
+                    .pointer("/attributes/messageBody")
+                    .and_then(Value::as_str)
+                    .is_some_and(|b| body_hash(b) == record.body_hash)
+                && attachments.is_some_and(|a| a.as_array().is_some_and(Vec::is_empty));
+            if !clean {
+                return Err(unsent(
+                    "reviewer_reply_draft_conflict: draft read-back differs from the request"
+                        .into(),
+                ));
+            }
+            Ok(())
+        };
+        validate_current(&current)?;
         let again = async {
             let unresolved = self.verify_membership(pin, &app, &sid).await?;
             self.verify_thread(pin, &sid, &tid, unresolved).await?;
@@ -666,6 +672,13 @@ impl Reviewer {
             ));
         }
 
+        // Context reads can take time while the draft is editable in App Store Connect.
+        // Revalidate immediately before sending; this cannot make the remote POST conditional.
+        let current = self
+            .draft_data(pin, &tid)
+            .await
+            .map_err(|e| unsent(code(&e)))?;
+        validate_current(&current)?;
         self.check_pin(pin).await.map_err(|e| unsent(code(&e)))?;
         record.state = "send_attempted".into();
         self.save_record(record)?;
@@ -898,5 +911,45 @@ impl Reviewer {
         record.state = "reset".into();
         self.save_record(&record)?;
         Ok(json!({"status":"reset","thread_id":tid,"sent":false}))
+    }
+}
+
+#[cfg(test)]
+mod record_tests {
+    use super::*;
+
+    // Exercise the actual saver: rejecting an oversized replacement must preserve the old record.
+    #[test]
+    fn oversized_outbox_save_preserves_existing_readable_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let reviewer = Reviewer::for_test("http://127.0.0.1:1", dir.path());
+        let mut record = Record {
+            app_id: "123".into(),
+            submission_id: "sub1".into(),
+            thread_id: "thr1".into(),
+            expected_apple_message_id: "m-apple-1".into(),
+            body_hash: body_hash("Thanks, fixed"),
+            intent_at: 0,
+            prior_message_ids: vec!["m-apple-1".into()],
+            draft_id: Some("draft-new".into()),
+            response_message_id: None,
+            state: "draft_created".into(),
+            http_status: None,
+            error_kind: None,
+        };
+        reviewer.save_record(&record).unwrap();
+        let path = record_path(dir.path(), "thr1");
+        let before = fs::read(&path).unwrap();
+        record.prior_message_ids.push("x".repeat(8 * 1024 * 1024));
+        record.state = "send_attempted".into();
+        let error = reviewer.save_record(&record).unwrap_err().to_string();
+        assert!(
+            error.contains("reviewer_reply_outbox_unwritable"),
+            "{error}"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let saved = reviewer.load_record("thr1").unwrap().unwrap();
+        assert_eq!(saved.state, "draft_created");
+        assert_eq!(saved.prior_message_ids, ["m-apple-1"]);
     }
 }

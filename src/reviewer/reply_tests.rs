@@ -66,6 +66,9 @@ struct Cfg {
     rotate_on_session: bool,
     /// Thread list pagination: `kept`, `changed` or `dropped` submission filter on page 2.
     thread_next: Option<&'static str>,
+    /// Simulate a concurrent web edit during the second membership validation.
+    draft_change_on_revalidation: Option<&'static str>,
+    extra_prior_messages: usize,
 }
 
 impl Default for Cfg {
@@ -89,6 +92,8 @@ impl Default for Cfg {
             swap_source: None,
             rotate_on_session: false,
             thread_next: None,
+            draft_change_on_revalidation: None,
+            extra_prior_messages: 0,
         }
     }
 }
@@ -102,6 +107,7 @@ struct St {
     /// Creation date of the delivered message (real clock, never a hardcoded past date).
     sent_date: Option<String>,
     swapped: bool,
+    draft_change: Option<&'static str>,
 }
 
 /// A different account's valid session, published as a replacement source.
@@ -124,6 +130,22 @@ fn actors(kind: &str) -> Value {
 
 fn route(cfg: &Cfg, st: &mut St, r: &Req) -> (u16, Value) {
     let p = r.path.as_str();
+    if r.method == "GET"
+        && p == "/iris/v1/apps/123/reviewSubmissions"
+        && st
+            .log
+            .iter()
+            .filter(|q| q.method == "GET" && q.path == p)
+            .count()
+            == 2
+    {
+        st.draft_change = cfg.draft_change_on_revalidation;
+        match st.draft_change {
+            Some("body") => st.draft.as_mut().unwrap().0 = "Changed in the web UI".into(),
+            Some("deleted") => st.draft = None,
+            _ => (),
+        }
+    }
     if let Some((path, source)) = &cfg.swap_source
         && *path == p
         && !st.swapped
@@ -188,6 +210,14 @@ fn route(cfg: &Cfg, st: &mut St, r: &Req) -> (u16, Value) {
                 "2026-01-01T00:00:00Z",
                 "Please fix",
             )];
+            for i in 0..cfg.extra_prior_messages {
+                data.push(msg(
+                    &format!("m-dev-{i:010}-{}", "x".repeat(80)),
+                    "developer",
+                    "2026-01-02T00:00:00Z",
+                    "Earlier developer note",
+                ));
+            }
             if cfg.bad_actor {
                 data.push(msg("m-x", "robot", "2026-01-02T00:00:00Z", "?"));
             }
@@ -204,6 +234,9 @@ fn route(cfg: &Cfg, st: &mut St, r: &Req) -> (u16, Value) {
             (200, json!({"data":data,"included":inc}))
         }
         ("GET", "/iris/v1/resolutionCenterThreads/thr1/resolutionCenterDraftMessage") => {
+            if st.draft_change == Some("read_failure") {
+                return (503, json!({"errors":[{"code":"UNAVAILABLE"}]}));
+            }
             if cfg.existing_draft {
                 (
                     200,
@@ -223,11 +256,19 @@ fn route(cfg: &Cfg, st: &mut St, r: &Req) -> (u16, Value) {
                     } else {
                         "developer@example.invalid"
                     });
-                if cfg.attached_draft {
+                if cfg.attached_draft || st.draft_change == Some("attachment") {
                     response["data"]["relationships"]["resolutionCenterMessageAttachments"]["data"] =
                         json!([{"type":"resolutionCenterMessageAttachments","id":"attachment-1"}]);
                 }
-                if cfg.missing_attachment_metadata {
+                if st.draft_change == Some("missing_body") {
+                    response["data"]["attributes"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("messageBody");
+                }
+                if cfg.missing_attachment_metadata
+                    || st.draft_change == Some("missing_attachment_metadata")
+                {
                     response["data"]["relationships"]
                         .as_object_mut()
                         .unwrap()
@@ -1382,4 +1423,109 @@ fn pagination_scope_rules() {
     ] {
         assert!(ok(bad).is_err(), "{bad}");
     }
+}
+
+// These regressions catch a missing final draft validation after context reads:
+// a web edit must leave the durable attempt definitely unsent in either entry point.
+async fn assert_context_draft_change_is_unsent(resume: bool, change: &'static str) {
+    let (d, r, st) = setup(Cfg {
+        draft_change_on_revalidation: Some(change),
+        ..Cfg::default()
+    })
+    .await;
+    if resume {
+        pending_record_and_draft(&d, &st, "draft_created");
+    }
+    let result = if resume {
+        r.call("resume_unsent_app_review_reply", &resume_args())
+            .await
+    } else {
+        r.call("reply_app_review_message", &args()).await
+    };
+    assert_eq!(
+        message_posts(&st),
+        0,
+        "{change}: a changed or unreadable draft must never be sent: {result:?}"
+    );
+    let error = result
+        .expect_err("draft validation must fail closed")
+        .to_string();
+    let expected = if change == "read_failure" {
+        "reviewer_reply_draft_unverifiable"
+    } else {
+        "reviewer_reply_draft_conflict"
+    };
+    assert!(error.contains(expected), "{error}");
+    let saved: Value =
+        serde_json::from_slice(&std::fs::read(reply::record_path(d.path(), "thr1")).unwrap())
+            .unwrap();
+    assert_eq!(saved["state"], "draft_created");
+    assert_eq!(saved["draft_id"], "draft-new");
+    let status = r
+        .call("get_app_review_reply_status", &status_args())
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "not_sent", "{status}");
+    assert_eq!(status["phase"], "draft_created");
+    assert_eq!(message_posts(&st), 0);
+}
+
+#[tokio::test]
+async fn reply_rejects_body_changed_during_context_revalidation() {
+    assert_context_draft_change_is_unsent(false, "body").await;
+}
+
+#[tokio::test]
+async fn resume_rejects_body_changed_during_context_revalidation() {
+    assert_context_draft_change_is_unsent(true, "body").await;
+}
+
+#[tokio::test]
+async fn reply_rejects_attachment_added_during_context_revalidation() {
+    assert_context_draft_change_is_unsent(false, "attachment").await;
+}
+
+#[tokio::test]
+async fn resume_rejects_attachment_added_during_context_revalidation() {
+    assert_context_draft_change_is_unsent(true, "attachment").await;
+}
+
+#[tokio::test]
+async fn final_draft_read_failure_leaves_reply_and_resume_unsent() {
+    for resume in [false, true] {
+        assert_context_draft_change_is_unsent(resume, "read_failure").await;
+    }
+}
+
+#[tokio::test]
+async fn final_draft_missing_data_leaves_reply_and_resume_unsent() {
+    for change in ["deleted", "missing_body", "missing_attachment_metadata"] {
+        for resume in [false, true] {
+            assert_context_draft_change_is_unsent(resume, change).await;
+        }
+    }
+}
+
+// The writer already accepts this record. A smaller loader limit loses status after a restart.
+#[tokio::test]
+async fn large_thread_outbox_remains_readable_after_delivery() {
+    let (d, r, st) = setup(Cfg {
+        extra_prior_messages: 1000,
+        ..Cfg::default()
+    })
+    .await;
+    let result = r.call("reply_app_review_message", &args()).await.unwrap();
+    assert_eq!(result["status"], "delivered");
+    let path = reply::record_path(d.path(), "thr1");
+    assert!(std::fs::metadata(&path).unwrap().len() > 64 * 1024);
+    let saved: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    assert_eq!(saved["prior_message_ids"].as_array().unwrap().len(), 1001);
+    let restarted = Reviewer::for_test(r.origin.as_str(), d.path());
+    let status = restarted
+        .call("get_app_review_reply_status", &status_args())
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "delivered");
+    assert_eq!(status["message_id"], "m-dev-new");
+    assert_eq!(message_posts(&st), 1, "status must never resend");
 }

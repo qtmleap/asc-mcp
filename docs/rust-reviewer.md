@@ -176,10 +176,13 @@ caller gets `reviewer_reply_busy`) → read the durable record (`reply-<thread>.
 no duplicate developer body (CRLF/outer whitespace folded) and no existing draft (only
 `data: null` proves absence; errors are not absence) → write the `intent` record → `POST`
 draft (`messageBody` raw string, `resolutionCenterThread` relationship) → record
-`draft_created` → GET the draft and re-check context, leaving the draft unsent on any
-difference → record `send_attempted` → `POST` message with `createFromDraftMessage` →
+`draft_created` → GET the draft, re-check context, then GET the draft again immediately
+before sending, leaving the draft unsent on any difference → record `send_attempted` →
+`POST` message with `createFromDraftMessage` →
 read back. Headers for these writes: `X-Csrf-Itc: [asc-ui]`, `Accept`/`Content-Type:
 application/vnd.api+json` (legacy transport unchanged). POSTs are never replayed.
+The final draft read detects edits made during the context checks; it cannot
+atomically prevent another client from editing between that GET and the POST.
 
 Session binding: each reply, resume, reset or status call pins the authentication source
 generation once. The `/olympus/v1/session` ownership proof, every preflight GET, the draft
@@ -198,7 +201,8 @@ re-added with its original value, so a page cannot widen thread membership.
 
 Records in any state other than `delivered` or explicitly `reset` block every later send on the thread, even a
 different body, until inspected by a person; nothing deletes or patches drafts or
-records automatically. Messages are limited to 4000 UTF-16 units (matching the observed
+records automatically. Record reads and atomic writes share the same 8 MiB
+serialized-size limit. Messages are limited to 4000 UTF-16 units (matching the observed
 web reply box maxLength, not a public API specification),
 non-blank, no control characters. Errors expose fixed codes only, never response bodies,
 message text or cookies.
