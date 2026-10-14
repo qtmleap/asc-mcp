@@ -14,7 +14,16 @@ No Data tools still refuse collection disclosures and never delete records.
   `used_for_tracking`. Unsupported or inconsistent shapes return null instead
   of silently omitting rows.
 - `snapshot_digest`: SHA-256 over the app, exact rows, publication resource, and
-  publication state. Obtain this from a fresh read before each mutation.
+  publication state including the validated `lastPublished` observation. Obtain
+  this from a fresh read before each mutation.
+- `intent_fingerprint`, `intent_state`, `partial_confirmed`, `collection_complete`,
+  and `last_error`: safe recovery metadata. The fingerprint binds exact private
+  record bytes without exposing the authentication generation or credentials.
+  Failure diagnostics contain only a fixed error kind and optional HTTP status,
+  never Apple response bodies, headers, or account details.
+- `last_published` and `last_published_status`: a validated RFC 3339 timestamp, or
+  the fixed status `null`, `missing`, or `invalid`. The publisher email in
+  `lastPublishedBy` is never returned.
 
 ## Save a collection draft
 
@@ -67,8 +76,19 @@ a new digest from the verified draft, plus:
 All three attestations must be true. These express the publisher's authorization
 and declarations; the MCP does not decide legal compliance. Fresh GETs must match
 the exact intended matrix and snapshot before one publish PATCH. Success requires
-the same publication resource, unchanged questionnaire, and published=true in
-the readback. Already matching published data is idempotent.
+the same publication resource and unchanged questionnaire in the readback, plus
+an advancing validated `lastPublished` timestamp or a verified false-to-true
+publication transition with valid timestamp observations. A currently published
+baseline requires a valid timestamp. An explicit null is allowed only when the
+baseline is unpublished, for first publication; a missing or invalid attribute
+is refused before PATCH.
+
+The old `published: true` flag alone does not prove these answers were freshly
+published. An authorized publish call sends one PATCH even when that flag was
+already true. It skips only when an unchanged-source, matching confirmed publish
+intent proves the exact matrix, publication resource, post-snapshot and timestamp
+observation. An ambiguous PATCH cannot be reconciled by an unchanged old true
+flag. Missing, invalid or non-advancing evidence never claims fresh publication.
 
 ## Non-atomic writes and uncertainty
 
@@ -103,7 +123,65 @@ Both collection intent types require the original publication resource, so GET
 cannot silently reconcile an unexpected publication after a service restart.
 A partial matrix or absence alone cannot establish final completion. Do not
 delete the private intent file, replay a write, or claim success to clear it.
-This version deliberately provides no automatic partial-batch recovery.
+Partial recovery is explicit and private-state-only as described below; it never
+automatically retries an uncertain write.
+
+## Acknowledge a verified applied prefix
+
+`acknowledge_app_privacy_partial` sends only GETs to Apple. It requires:
+
+```json
+{
+  "app_id": "123",
+  "disclosures": [
+    {
+      "category": "DEVICE_ID",
+      "purposes": ["ANALYTICS", "APP_FUNCTIONALITY"],
+      "linked_to_user": true,
+      "used_for_tracking": false
+    }
+  ],
+  "expected_intent_fingerprint": "<fresh exact private-record fingerprint from GET>",
+  "expected_snapshot_digest": "<fresh exact observed snapshot digest from GET>",
+  "confirmation": "ACKNOWLEDGE_CONFIRMED_APP_PRIVACY_PARTIAL",
+  "exclusive_editing_confirmed": true
+}
+```
+
+The `disclosures` array must be the complete original matrix accepted by the set
+tool. Recovery requires the same authentication source and original
+matrix, the original publication resource, both exact digests, and an observed
+completed prefix at the recorded attempted step. An absent uncertain POST is
+never acknowledged. Original states are limited to a single No Data record or
+a normalized subset of the same intended matrix, with no obsolete collection
+rows to delete. Retained row IDs and attributes must be unchanged; added tuples
+and their resource IDs must be unique and exactly match the applied prefix.
+
+Before changing local state, the MCP preserves the original raw intent bytes in
+a private archive and verifies them. Archive conflict or failure keeps the
+original pending record. Success records `partial_confirmed` and an exact
+recovery checkpoint; it reports `collection_complete: false` and
+`remote_writes: 0`. It does not publish, delete disclosures, recreate an existing
+tuple, or claim the full batch completed.
+
+The next set must match that exact checkpoint, original source, original matrix,
+and publication resource. It preserves existing rows and creates only missing
+tuples. Any changed checkpoint is refused. No Data mutations remain blocked, and
+publication is refused until the full original matrix is observed. If another
+POST commits but its response fails, the newly recorded applied prefix can be
+acknowledged the same way, retaining the archive chain across service restarts.
+
+A recorded prefix can temporarily split tracking rows across purposes and thus
+cannot normalize to complete disclosure answers. Only an authenticated exact
+partial checkpoint permits continuing that shape. The resumed intent retains
+its initial checkpoint digest and the archived original intent fingerprint.
+Recovery verifies every referenced archive's raw SHA-256, app, authentication
+source, full desired matrix, publication resource, initial snapshot, and exact
+recorded applied prefix. Retained IDs and attributes must match; new IDs are
+bound by the saved full snapshot digest, since a pre-POST intent cannot predict
+Apple's generated resource IDs. An identical external incomplete shape without
+this checkpoint is refused. Archive chains are bounded to 32 ancestor reads;
+corrupt, cyclic, foreign-context, or longer chains stop before further writes.
 
 ## Schema evidence and verification boundary
 
