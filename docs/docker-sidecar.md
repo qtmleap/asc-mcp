@@ -66,9 +66,11 @@ On macOS, install the native host helper and enroll once:
 ```sh
 cargo build --release --locked
 ./script/macos/install-renewal-agent.sh --binary "$PWD/target/release/asc-mcp"
-./script/docker/reviewer-login.sh stack --fresh
-ASC_REVIEW_RENEWAL_WAIT_SECS=30 ./script/docker/compose.sh stack up -d --build asc-mcp
+./script/docker/reviewer-login.sh standalone --fresh
+ASC_REVIEW_RENEWAL_WAIT_SECS=30 ./script/docker/compose.sh standalone up -d --build asc-mcp
 ```
+
+Use `stack` instead of `standalone` for the shared LocalGPT deployment.
 
 The helper remembers the confirmed Apple ID and team, saves the confirmed password in macOS Keychain and reuses trusted-device cookies. Its LaunchAgent checks periodically and wakes on the advisory renewal marker. Persist `ASC_REVIEW_RENEWAL_WAIT_SECS=30` in private `runtime.env` across later service recreation. Docker credentials stay read-only; Keychain and login trust stay on the host.
 

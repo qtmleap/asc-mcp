@@ -10,12 +10,17 @@ Review status and Apple's messages, and send an explicit, read-back-verified
 reply across server restarts. These are App Review conversations, not public App
 Store customer reviews. The server is a Rust binary built inside the Docker image.
 
+This guide builds, starts, validates and manages the MCP server with Docker
+Compose. The macOS login-helper prerequisite is described separately below;
+native development is covered in [SETUP.md](SETUP.md).
+
 ## Quick start (Docker)
 
 Prerequisites: Docker with Linux containers, Compose 2.30+ with BuildKit, Git,
 curl, a POSIX shell and OpenSSL for the setup script. No host Rust toolchain is needed
 to run the server. The Compose file builds the checked-out source, so you run
 what you cloned (the published `latest` image may lag).
+Run the following commands from the repository root after cloning.
 
 ```sh
 git clone https://github.com/qtmleap/asc-mcp.git && cd asc-mcp
@@ -106,6 +111,25 @@ Details: [docs/docker-sidecar.md](docs/docker-sidecar.md).
 After changing credentials or `runtime.env`, recreate the service with
 `./script/docker/compose.sh standalone up -d --force-recreate asc-mcp`.
 
+### 4. Use and manage the container
+
+Inspect the tool catalogue through the running container:
+
+```sh
+./script/docker/compose.sh standalone exec -T asc-mcp /usr/local/bin/asc-mcp tools
+```
+
+| Operation | Command |
+| --- | --- |
+| Container status | `./script/docker/compose.sh standalone ps asc-mcp` |
+| Recent logs | `./script/docker/compose.sh standalone logs --tail 100 asc-mcp` |
+| Rebuild after updating the checkout | `./script/docker/compose.sh standalone up -d --build asc-mcp` |
+| Stop the server | `./script/docker/compose.sh standalone stop asc-mcp` |
+
+Stopping the server preserves the private credentials and session state in
+`~/.config/asc-mcp`. Send tool requests through your MCP client after connecting
+it below; these management commands operate the container.
+
 ## Connect a client
 
 The endpoint is `http://127.0.0.1:8878/mcp` (loopback only). Clients must send
@@ -143,17 +167,11 @@ privately and persisted across restarts.
 - Cookie updates are persisted and rotated, but the session expires. Apple may
   demand verification again; optional macOS Keychain renewal cannot bypass that.
 
-**macOS prerequisite:** `reviewer-login.sh` on Darwin needs the stable native
-helper. With Rust 1.88+ and Python 3 on the host, install it once before login:
-
-```sh
-cargo build --release --locked
-./script/macos/install-renewal-agent.sh --binary "$PWD/target/release/asc-mcp"
-```
-
-This host helper handles macOS login and Keychain renewal; the MCP server stays
-in Docker. Linux runs a disposable login container and can skip those two steps.
-See [login and renewal details](docs/docker-sidecar.md#log-in-or-renew-the-reviewer-session).
+**macOS prerequisite:** install the host login/Keychain helper once using the
+[macOS setup guide](docs/docker-sidecar.md#log-in-or-renew-the-reviewer-session)
+before the login command below. That helper requires Rust 1.88+ and Python 3 on
+the host; the MCP server remains in Docker. Linux runs login in a disposable
+container and needs no host helper.
 
 ```sh
 ./script/docker/reviewer-login.sh standalone --fresh
