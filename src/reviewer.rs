@@ -25,6 +25,8 @@ use url::Url;
 mod fs_safe;
 mod privacy;
 #[cfg(test)]
+mod privacy_collection_tests;
+#[cfg(test)]
 mod privacy_tests;
 #[cfg(test)]
 mod recovery_tests;
@@ -1107,6 +1109,14 @@ impl Reviewer {
             .find(|t| t["name"] == name)
             .context("unknown reviewer tool")?;
         let object = args.as_object().context("invalid arguments")?;
+        // Collection schemas contain arrays and booleans; their strict typed parser
+        // validates every field instead of the legacy string-only argument helper.
+        if matches!(
+            name,
+            "set_app_privacy_collection" | "publish_app_privacy_collection"
+        ) {
+            return self.privacy_call(name, args).await;
+        }
         let required = tool["inputSchema"]["required"].as_array().unwrap();
         if object.len() != required.len() {
             bail!("invalid arguments");
