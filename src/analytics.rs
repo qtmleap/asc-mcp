@@ -421,7 +421,10 @@ async fn run(client: &ApiClient, kind: &Kind, args: &Args) -> Result<Value, Stop
                     || b.as_ref()
                         .is_some_and(|b| instance.processing < b.processing)
             }
-            (None, Some(b)) => instance.processing < b.date,
+            (None, Some(b)) => {
+                instance.processing < b.date
+                    || (instance.processing == b.date && instance.processing < b.processing)
+            }
             (None, None) => false,
         };
         if stop {

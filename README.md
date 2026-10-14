@@ -307,7 +307,8 @@ Instance metadata is read in full (up to 2,000 instances, at most 10 pages of 20
 before sorting newest `processingDate` first; a larger list is `unavailable`.
 Segments are then downloaded only until the result is settled: the default search
 stops once the next `processingDate` is earlier than the greatest event date
-already seen (an instance cannot hold event dates after its own processing date),
+already seen, or equals it but is older than the winning processing date
+(an instance cannot hold event dates after its own processing date),
 and an explicit `report_date` search stops once the next `processingDate` is
 earlier than that date or than the processing date of the partition already
 resolved. Only the winning date partition is retained, and it is replaced as a
@@ -326,6 +327,10 @@ makes the result `unavailable`.
 Omit `limit` when calling `get_beta_build_usage_metrics`. Apple rejects it
 unless grouping or filtering is used, and those options are not
 exposed by this server.
+
+Signed segment downloads require direct HTTPS access. The isolated downloader
+does not use proxy environment variables, cookies, redirects or API credentials;
+networks requiring a mandatory proxy cannot retrieve these segments.
 
 References: [requesting and downloading reports](https://developer.apple.com/documentation/appstoreconnectapi/downloading-analytics-reports),
 [App Sessions](https://developer.apple.com/documentation/analytics-reports/app-sessions),

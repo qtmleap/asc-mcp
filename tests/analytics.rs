@@ -837,22 +837,24 @@ async fn present_but_wrong_checksum_is_still_unavailable() {
 
 #[tokio::test]
 async fn default_equal_processing_duplicates_remain_unavailable() {
-    let m = MockServer::start_async().await;
-    mock_request_and_reports(&m).await;
-    mock_instances(
-        &m,
-        "r1",
-        vec![
-            instance("a", "DAILY", "2026-10-12"),
-            instance("b", "DAILY", "2026-10-12"),
-        ],
-    )
-    .await;
-    mount_instance(&m, "a", sessions_gz("2026-10-09", 10)).await;
-    mount_instance(&m, "b", sessions_gz("2026-10-09", 20)).await;
-    let out = usage(&m, json!({"app_id":"1"})).await;
-    assert_eq!(out["status"], "unavailable", "{out}");
-    assert!(out["sessions_total"].is_null());
+    for processing in ["2026-10-12", "2026-10-09"] {
+        let m = MockServer::start_async().await;
+        mock_request_and_reports(&m).await;
+        mock_instances(
+            &m,
+            "r1",
+            vec![
+                instance("a", "DAILY", processing),
+                instance("b", "DAILY", processing),
+            ],
+        )
+        .await;
+        mount_instance(&m, "a", sessions_gz("2026-10-09", 10)).await;
+        mount_instance(&m, "b", sessions_gz("2026-10-09", 20)).await;
+        let out = usage(&m, json!({"app_id":"1"})).await;
+        assert_eq!(out["status"], "unavailable", "{out}");
+        assert!(out["sessions_total"].is_null());
+    }
 }
 
 #[tokio::test]
@@ -922,4 +924,84 @@ async fn blank_optional_duration_is_null_but_malformed_nonempty_duration_is_reje
             assert_eq!(out["status"], "unavailable", "{cell}: {out}");
         }
     }
+}
+
+#[tokio::test]
+async fn default_skips_same_event_day_when_processed_earlier_than_the_winner() {
+    let m = MockServer::start_async().await;
+    mock_request_and_reports(&m).await;
+    mock_instances(
+        &m,
+        "r1",
+        vec![
+            instance("new", "DAILY", "2026-10-12"),
+            instance("old", "DAILY", "2026-10-11"),
+        ],
+    )
+    .await;
+    mount_instance(&m, "new", sessions_gz("2026-10-11", 7)).await;
+    let old = m
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/v1/analyticsReportInstances/old/segments");
+            then.status(500);
+        })
+        .await;
+    let out = usage(&m, json!({"app_id":"1"})).await;
+    assert_eq!(out["status"], "available", "{out}");
+    assert_eq!(out["sessions_total"], 7);
+    old.assert_calls_async(0).await;
+}
+
+#[tokio::test]
+async fn explicit_date_stops_after_its_newest_correction_or_before_older_processing() {
+    for (new_event, expected_status) in [("2026-10-09", "available"), ("2026-10-08", "no_data")] {
+        let m = MockServer::start_async().await;
+        mock_request_and_reports(&m).await;
+        let old_processing = if expected_status == "available" {
+            "2026-10-11"
+        } else {
+            "2026-10-08"
+        };
+        mock_instances(
+            &m,
+            "r1",
+            vec![
+                instance("new", "DAILY", "2026-10-12"),
+                instance("old", "DAILY", old_processing),
+            ],
+        )
+        .await;
+        mount_instance(&m, "new", sessions_gz(new_event, 7)).await;
+        let old = m
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .path("/v1/analyticsReportInstances/old/segments");
+                then.status(500);
+            })
+            .await;
+        let out = usage(&m, json!({"app_id":"1","report_date":"2026-10-09"})).await;
+        assert_eq!(out["status"], expected_status, "{out}");
+        if expected_status == "available" {
+            assert_eq!(out["sessions_total"], 7);
+            assert_eq!(out["processing_date"], "2026-10-12");
+        } else {
+            assert!(out["sessions_total"].is_null());
+        }
+        old.assert_calls_async(0).await;
+    }
+}
+
+#[tokio::test]
+async fn explicit_date_rejects_invalid_other_rows_after_processing_date() {
+    let m = MockServer::start_async().await;
+    mock_request_and_reports(&m).await;
+    mock_instances(&m, "r1", vec![instance("i1", "DAILY", "2026-10-10")]).await;
+    let gz = gzip(&format!(
+        "{SESSIONS_HEADER}2026-10-09\t1\tiPhone\tJP\t5\t3\n2026-10-11\t1\tiPhone\tJP\t2\t2\n"
+    ));
+    mount_instance(&m, "i1", gz).await;
+    let out = usage(&m, json!({"app_id":"1","report_date":"2026-10-09"})).await;
+    assert_eq!(out["status"], "unavailable", "{out}");
+    assert!(out["sessions_total"].is_null());
 }
