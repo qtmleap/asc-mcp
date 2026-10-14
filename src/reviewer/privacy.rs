@@ -8,9 +8,10 @@ pub(super) const NAMES: &[&str] = &[
     "publish_app_privacy_no_data",
     "set_app_privacy_collection",
     "publish_app_privacy_collection",
+    "acknowledge_app_privacy_partial",
 ];
 pub(super) fn tools() -> Vec<Value> {
-    NAMES.iter().filter(|name| !name.ends_with("_collection")).map(|name| {
+    NAMES.iter().filter(|name| matches!(**name, "get_app_privacy_details" | "declare_app_privacy_no_data" | "publish_app_privacy_no_data")).map(|name| {
         let mut props=json!({"app_id":{"type":"string","pattern":"^[0-9]{1,128}$"}});
         let mut required=vec!["app_id"];
         if *name!="get_app_privacy_details" {
@@ -55,6 +56,18 @@ struct Intent {
     total_steps: usize,
     #[serde(default)]
     draft_was_unpublished: bool,
+    #[serde(default)]
+    recovery_snapshot_digest: Option<String>,
+    #[serde(default)]
+    archived_intent_fingerprint: Option<String>,
+    #[serde(default)]
+    publication_before: Option<PublicationCheckpoint>,
+    #[serde(default)]
+    publication_after: Option<PublicationCheckpoint>,
+    #[serde(default)]
+    confirmed_snapshot_digest: Option<String>,
+    #[serde(default)]
+    last_error: Option<PrivacyFailure>,
 }
 struct Snapshot {
     count: usize,
@@ -62,6 +75,82 @@ struct Snapshot {
     publish_id: String,
     published: bool,
     rows: Vec<UsageRow>,
+    publication: PublicationCheckpoint,
+}
+#[derive(Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum PublicationTimestampStatus {
+    Valid,
+    Null,
+    #[default]
+    Missing,
+    Invalid,
+}
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct PublicationCheckpoint {
+    published: bool,
+    last_published_status: PublicationTimestampStatus,
+    last_published: Option<DateTime<Utc>>,
+}
+impl PublicationCheckpoint {
+    fn valid_before(&self) -> bool {
+        self.last_published_status == PublicationTimestampStatus::Valid
+            && self.last_published.is_some()
+            || !self.published
+                && self.last_published_status == PublicationTimestampStatus::Null
+                && self.last_published.is_none()
+    }
+    fn proves_new_publication(&self, before: &Self) -> bool {
+        if !before.valid_before()
+            || !self.published
+            || self.last_published_status != PublicationTimestampStatus::Valid
+            || self.last_published.is_none()
+        {
+            return false;
+        }
+        !before.published
+            || self
+                .last_published
+                .zip(before.last_published)
+                .is_some_and(|(after, before)| after > before)
+    }
+}
+#[derive(Clone, Serialize, Deserialize)]
+struct PrivacyFailure {
+    kind: String,
+    http_status: Option<u16>,
+}
+fn privacy_failure(error: &anyhow::Error) -> PrivacyFailure {
+    let text = error.to_string();
+    let http_status = text
+        .split("HTTP ")
+        .nth(1)
+        .and_then(|s| s.split_ascii_whitespace().next())
+        .and_then(|s| s.trim_end_matches([';', ',', ':']).parse::<u16>().ok())
+        .filter(|s| (100..600).contains(s));
+    let kind = if text.starts_with("reviewer_session_changed") {
+        "authentication_source_changed"
+    } else if text.contains("invalid JSON") {
+        "non_json"
+    } else if text.contains("interrupted response") {
+        "interrupted_response"
+    } else if text.contains("oversized response") {
+        "oversized_response"
+    } else if text.contains("redirect") {
+        "redirect"
+    } else if http_status.is_some_and(|s| s >= 500) {
+        "server_error"
+    } else if http_status.is_some() {
+        "http_rejected"
+    } else if text.contains("request interrupted") || text.contains("connection failed") {
+        "transport"
+    } else {
+        "client_error"
+    };
+    PrivacyFailure {
+        kind: kind.into(),
+        http_status,
+    }
 }
 impl Snapshot {
     fn safe_no_data(&self) -> bool {
@@ -223,6 +312,21 @@ struct PublishArgs {
     complies_with_app_store_guidelines_and_law: bool,
     will_update_if_changed: bool,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AcknowledgeArgs {
+    app_id: String,
+    disclosures: Vec<Disclosure>,
+    expected_intent_fingerprint: String,
+    expected_snapshot_digest: String,
+    confirmation: String,
+    exclusive_editing_confirmed: bool,
+}
+fn valid_digest(s: &str) -> bool {
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
+}
 fn desired_tuples(disclosures: &[Disclosure]) -> Result<Vec<UsageTuple>> {
     if disclosures.is_empty() || disclosures.len() > CATEGORIES.len() {
         bail!("reviewer_privacy_disclosures_invalid");
@@ -265,7 +369,7 @@ fn desired_tuples(disclosures: &[Disclosure]) -> Result<Vec<UsageTuple>> {
     Ok(result)
 }
 fn collection_tools() -> Vec<Value> {
-    ["set_app_privacy_collection", "publish_app_privacy_collection"].iter().map(|name| {
+    let mut result:Vec<Value> = ["set_app_privacy_collection", "publish_app_privacy_collection"].iter().map(|name| {
         let publish = *name == "publish_app_privacy_collection";
         let mut properties = json!({"app_id":{"type":"string","pattern":"^[0-9]{1,128}$"},
           "expected_snapshot_digest":{"type":"string","pattern":"^[0-9a-f]{64}$","description":"Exact snapshot_digest from a fresh get_app_privacy_details call; matches the full observed preflight questionnaire, not a server conditional write."},
@@ -277,13 +381,23 @@ fn collection_tools() -> Vec<Value> {
             properties[field] = json!({"type":"boolean","const":true}); required.push(field);
         }}
         json!({"name":name,"description":if publish { "Publish only the exact intended collection disclosure matrix observed in a fresh full snapshot. Requires exclusive questionnaire editing, accuracy, compliance and future-update attestations. One pinned PATCH, verified GET, no retries. No server conditional-write contract: client checks cannot detect all concurrent changes." } else { "Replace the full collection questionnaire with an explicitly confirmed matrix only if its fresh snapshot digest matches. Requires exclusive questionnaire editing for the entire batch. Removes only obsolete exact preflight rows and adds missing tuples. Writes are non-atomic; client preflight/readback is not server compare-and-swap and cannot detect all concurrent same-resource changes. Pinned durable intents block uncertain partial results." },"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":false,"destructiveHint":!publish,"openWorldHint":true}})
-    }).collect()
+    }).collect();
+    let mut schema = result[0]["inputSchema"].clone();
+    schema["properties"]["confirmation"] =
+        json!({"type":"string","enum":["ACKNOWLEDGE_CONFIRMED_APP_PRIVACY_PARTIAL"]});
+    schema["properties"]["expected_intent_fingerprint"] = json!({"type":"string","pattern":"^[0-9a-f]{64}$","description":"Fresh intent_fingerprint from get_app_privacy_details. Binds the exact original pending private record without exposing credentials."});
+    schema["required"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("expected_intent_fingerprint"));
+    result.push(json!({"name":"acknowledge_app_privacy_partial","description":"Acknowledge only a conclusively observed applied prefix of an original collection batch. Requires exact original-intent and fresh snapshot digests, unchanged authentication source, original matrix and exclusive editing. Archives original bytes before saving a partial checkpoint. Sends only GET requests to Apple; never retries, rolls back, deletes disclosures, publishes or claims the whole matrix complete. Supports original NoData, same-desired normalized subset, or an exact checkpoint proven by a bounded archive chain; no obsolete collection deletions.","inputSchema":schema,"annotations":{"readOnlyHint":false,"destructiveHint":false,"openWorldHint":true}}));
+    result
 }
 impl Snapshot {
     fn fingerprint(&self, app: &str) -> String {
         let mut rows = self.rows.clone();
         rows.sort();
-        digest(serde_json::to_vec(&json!({"app_id":app,"rows":rows,"publish_state_id":self.publish_id,"published":self.published})).unwrap().as_slice())
+        digest(serde_json::to_vec(&json!({"app_id":app,"rows":rows,"publish_state_id":self.publish_id,"published":self.published,"last_published":self.publication.last_published,"last_published_status":self.publication.last_published_status})).unwrap().as_slice())
     }
     fn tuples(&self) -> Result<Vec<UsageTuple>> {
         let mut ids = HashSet::new();
@@ -345,6 +459,239 @@ fn disclosures_from_tuples(tuples: &[UsageTuple]) -> Result<Vec<Disclosure>> {
     Ok(result)
 }
 impl Reviewer {
+    fn privacy_intent_bytes(&self, app: &str) -> Result<Vec<u8>> {
+        private_read(&self.privacy_path(app), MAX_BODY)
+            .map_err(|_| anyhow::anyhow!("reviewer_privacy_record_unreadable"))
+    }
+    fn privacy_partial_archive(&self, intent: &Intent) -> Result<(String, Intent)> {
+        let fingerprint = intent
+            .archived_intent_fingerprint
+            .as_ref()
+            .filter(|s| valid_digest(s))
+            .context("reviewer_privacy_archive_required")?;
+        let path = self.root.join(format!(
+            "privacy-{}-partial-{fingerprint}.json",
+            intent.app_id
+        ));
+        let bytes = private_read(&path, MAX_BODY)
+            .map_err(|_| anyhow::anyhow!("reviewer_privacy_archive_required"))?;
+        if digest(&bytes) != *fingerprint {
+            bail!("reviewer_privacy_archive_invalid");
+        }
+        let ancestor: Intent = serde_json::from_slice(&bytes)
+            .map_err(|_| anyhow::anyhow!("reviewer_privacy_archive_invalid"))?;
+        if ancestor.app_id != intent.app_id
+            || ancestor.generation != intent.generation
+            || ancestor.desired != intent.desired
+            || ancestor.publish_state_id != intent.publish_state_id
+            || ancestor.action != "collection_set"
+            || ancestor.state != "pending"
+        {
+            bail!("reviewer_privacy_recovery_context_mismatch");
+        }
+        Ok((fingerprint.clone(), ancestor))
+    }
+    fn privacy_verify_partial_prefix(
+        &self,
+        pin: &Pinned,
+        intent: &Intent,
+        observed: &[UsageRow],
+        ancestors: &mut HashSet<String>,
+    ) -> Result<()> {
+        let desired = intent
+            .desired
+            .as_ref()
+            .context("reviewer_privacy_recovery_not_supported")?;
+        let previous = intent
+            .previous_snapshot
+            .as_ref()
+            .context("reviewer_privacy_recovery_not_supported")?;
+        let initial: Vec<UsageRow> = serde_json::from_value(previous["rows"].clone())
+            .map_err(|_| anyhow::anyhow!("reviewer_privacy_record_invalid"))?;
+        let initial_published = previous["published"]
+            .as_bool()
+            .context("reviewer_privacy_record_invalid")?;
+        let mut initial_sorted = initial.clone();
+        initial_sorted.sort();
+        let mut initial_value = json!({"app_id":intent.app_id,"rows":initial_sorted,"publish_state_id":intent.publish_state_id,"published":initial_published});
+        // Legacy records predate timestamp-aware fingerprints. The recorded schema
+        // decides which observed fields were originally hashed; no values are guessed.
+        if previous.get("last_published_status").is_some() {
+            initial_value["last_published_status"] = previous["last_published_status"].clone();
+            initial_value["last_published"] = previous["last_published"].clone();
+        }
+        let initial_digest = digest(&serde_json::to_vec(&initial_value)?);
+        if previous["snapshot_digest"] != initial_digest {
+            bail!("reviewer_privacy_record_invalid");
+        }
+        let mut ids = HashSet::new();
+        if initial.iter().any(|r| {
+            !identifier(&r.id) || r.id.len() > 128 || !pin.public(&r.id) || !ids.insert(&r.id)
+        }) {
+            bail!("reviewer_privacy_record_invalid");
+        }
+        let no_data = initial.len() == 1
+            && initial[0].protection == "DATA_NOT_COLLECTED"
+            && initial[0].category.is_none()
+            && initial[0].purpose.is_none()
+            && initial[0].grouping.is_none();
+        let mut original_tuples = if no_data {
+            vec![]
+        } else {
+            initial
+                .iter()
+                .map(UsageRow::tuple)
+                .collect::<Result<Vec<_>>>()?
+        };
+        original_tuples.sort();
+        if original_tuples.windows(2).any(|w| w[0] == w[1])
+            || original_tuples.iter().any(|t| !desired.contains(t))
+        {
+            bail!("reviewer_privacy_recovery_not_supported");
+        }
+        if let Some(checkpoint) = &intent.recovery_snapshot_digest {
+            if checkpoint != &initial_digest || ancestors.len() >= 32 {
+                bail!("reviewer_privacy_recovery_provenance_invalid");
+            }
+            let (fingerprint, ancestor) = self.privacy_partial_archive(intent)?;
+            if !ancestors.insert(fingerprint) {
+                bail!("reviewer_privacy_recovery_provenance_invalid");
+            }
+            // A resumed initial shape may be incomplete only when the archived
+            // attempted prefix proves these exact retained rows and added tuples.
+            self.privacy_verify_partial_prefix(pin, &ancestor, &initial, ancestors)?;
+        } else if !original_tuples.is_empty() {
+            disclosures_from_tuples(&original_tuples)?;
+        }
+        let missing: Vec<_> = desired
+            .iter()
+            .filter(|t| !original_tuples.contains(t))
+            .cloned()
+            .collect();
+        let deletes = usize::from(no_data);
+        if intent.total_steps != deletes + missing.len()
+            || intent.step == 0
+            || intent.step >= intent.total_steps
+            || intent.step < deletes
+        {
+            bail!("reviewer_privacy_recovery_not_partial");
+        }
+        let mut retained = if no_data { vec![] } else { initial };
+        let mut observed_retained = Vec::new();
+        let mut observed_added = Vec::new();
+        let mut seen_ids = HashSet::new();
+        for row in observed {
+            if !identifier(&row.id)
+                || row.id.len() > 128
+                || !pin.public(&row.id)
+                || !seen_ids.insert(&row.id)
+            {
+                bail!("reviewer_privacy_recovery_prefix_mismatch");
+            }
+            if retained.iter().any(|r| r.id == row.id) {
+                observed_retained.push(row.clone());
+            } else {
+                observed_added.push(row.tuple()?);
+            }
+        }
+        retained.sort();
+        observed_retained.sort();
+        observed_added.sort();
+        let mut expected_added = missing[..intent.step - deletes].to_vec();
+        expected_added.sort();
+        if observed_retained != retained || observed_added != expected_added {
+            bail!(
+                "reviewer_privacy_recovery_prefix_mismatch: an absent uncertain POST is never acknowledged"
+            );
+        }
+        Ok(())
+    }
+    async fn privacy_acknowledge_partial(&self, args: &Value) -> Result<Value> {
+        let a: AcknowledgeArgs = serde_json::from_value(args.clone())
+            .map_err(|_| anyhow::anyhow!("reviewer_privacy_arguments_invalid"))?;
+        if a.confirmation != "ACKNOWLEDGE_CONFIRMED_APP_PRIVACY_PARTIAL"
+            || !a.exclusive_editing_confirmed
+        {
+            bail!("reviewer_privacy_confirmation_required");
+        }
+        if a.app_id.is_empty()
+            || a.app_id.len() > 128
+            || !a.app_id.bytes().all(|b| b.is_ascii_digit())
+            || !valid_digest(&a.expected_intent_fingerprint)
+            || !valid_digest(&a.expected_snapshot_digest)
+        {
+            bail!("reviewer_privacy_arguments_invalid");
+        }
+        let desired = desired_tuples(&a.disclosures)?;
+        let _lock = AppLock::acquire(&self.root, &a.app_id)?;
+        let original = self.privacy_intent_bytes(&a.app_id)?;
+        if digest(&original) != a.expected_intent_fingerprint {
+            bail!("reviewer_privacy_intent_mismatch");
+        }
+        let mut intent = self
+            .privacy_load(&a.app_id)?
+            .context("reviewer_privacy_intent_required")?;
+        if intent.action != "collection_set"
+            || intent.state != "pending"
+            || intent.desired.as_ref() != Some(&desired)
+        {
+            bail!("reviewer_privacy_recovery_not_supported");
+        }
+        let pin = self.pin().await?;
+        if pin.generation != intent.generation {
+            bail!("reviewer_privacy_recovery_source_mismatch");
+        }
+        let snapshot = self.privacy_snapshot(&pin, &a.app_id).await?;
+        if snapshot.fingerprint(&a.app_id) != a.expected_snapshot_digest
+            || snapshot.publish_id != intent.publish_state_id
+        {
+            bail!("reviewer_privacy_recovery_snapshot_mismatch");
+        }
+        if intent.draft_was_unpublished && snapshot.published {
+            bail!("reviewer_privacy_recovery_publication_changed");
+        }
+        self.privacy_verify_partial_prefix(&pin, &intent, &snapshot.rows, &mut HashSet::new())?;
+        let archive = self.root.join(format!(
+            "privacy-{}-partial-{}.json",
+            a.app_id, a.expected_intent_fingerprint
+        ));
+        match fs::symlink_metadata(&archive) {
+            Ok(_) => {
+                if private_read(&archive, MAX_BODY)
+                    .map_err(|_| anyhow::anyhow!("reviewer_privacy_archive_invalid"))?
+                    != original
+                {
+                    bail!("reviewer_privacy_archive_conflict");
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                write_private_atomic(&archive, &original)
+                    .map_err(|_| anyhow::anyhow!("reviewer_privacy_archive_unwritable"))?
+            }
+            Err(_) => bail!("reviewer_privacy_archive_unreadable"),
+        }
+        if private_read(&archive, MAX_BODY)
+            .map_err(|_| anyhow::anyhow!("reviewer_privacy_archive_invalid"))?
+            != original
+        {
+            bail!("reviewer_privacy_archive_invalid");
+        }
+        if self.privacy_intent_bytes(&a.app_id)? != original {
+            bail!("reviewer_privacy_intent_mismatch");
+        }
+        let fresh = self.privacy_snapshot(&pin, &a.app_id).await?;
+        if fresh.fingerprint(&a.app_id) != a.expected_snapshot_digest {
+            bail!("reviewer_privacy_recovery_snapshot_mismatch");
+        }
+        self.check_pin(&pin).await?;
+        intent.state = "partial_confirmed".into();
+        intent.recovery_snapshot_digest = Some(a.expected_snapshot_digest.clone());
+        intent.archived_intent_fingerprint = Some(a.expected_intent_fingerprint.clone());
+        self.privacy_save(&intent)?;
+        Ok(
+            json!({"app_id":a.app_id,"status":"partial_confirmed","collection_complete":false,"remote_writes":0,"completed_steps":intent.step,"total_steps":intent.total_steps,"archive_fingerprint":a.expected_intent_fingerprint,"recovery_snapshot_digest":a.expected_snapshot_digest}),
+        )
+    }
     async fn privacy_collection_call(&self, name: &str, args: &Value) -> Result<Value> {
         let publish = name == "publish_app_privacy_collection";
         let (app, disclosures, expected) = if publish {
@@ -393,9 +740,10 @@ impl Reviewer {
             bail!("reviewer_privacy_target_invalid");
         }
         let mut snapshot = self.privacy_snapshot(&pin, &app).await?;
-        if let Some(mut prior) = self.privacy_load(&app)? {
-            self.privacy_reconcile(&pin, &snapshot, &mut prior)?;
-            if prior.state == "pending" {
+        let mut prior = self.privacy_load(&app)?;
+        if let Some(i) = prior.as_mut() {
+            self.privacy_reconcile(&pin, &snapshot, i)?;
+            if i.state == "pending" {
                 bail!(
                     "reviewer_privacy_outcome_unknown: inspect with get_app_privacy_details; no write was retried"
                 );
@@ -406,21 +754,68 @@ impl Reviewer {
                 "reviewer_privacy_snapshot_mismatch: read the entire current questionnaire before replacing or publishing it"
             );
         }
-        // Refuse ambiguous existing collection shapes before any destructive request.
-        if !snapshot.safe_no_data() && !snapshot.rows.is_empty() {
-            snapshot.disclosures()?;
-        }
         let actual = if snapshot.safe_no_data() {
             vec![]
         } else {
             snapshot.tuples()?
         };
+        let mut authenticated_partial = false;
+        if let Some(i) = prior.as_ref().filter(|i| i.state == "partial_confirmed") {
+            if i.generation != pin.generation
+                || i.publish_state_id != snapshot.publish_id
+                || i.desired.as_ref() != Some(&desired)
+            {
+                bail!("reviewer_privacy_recovery_context_mismatch");
+            }
+            if !publish
+                && i.recovery_snapshot_digest.as_deref()
+                    != Some(snapshot.fingerprint(&app).as_str())
+            {
+                bail!("reviewer_privacy_recovery_checkpoint_changed");
+            }
+            if publish && actual != desired {
+                bail!("reviewer_privacy_partial_collection_incomplete");
+            }
+            if !publish {
+                let (fingerprint, ancestor) = self.privacy_partial_archive(i)?;
+                self.privacy_verify_partial_prefix(
+                    &pin,
+                    &ancestor,
+                    &snapshot.rows,
+                    &mut HashSet::from([fingerprint]),
+                )?;
+                authenticated_partial = true;
+            }
+        }
+        // A valid partial prefix may split tracking rows across purposes. Only
+        // its exact durable checkpoint and archived prefix authorize continuation.
+        if !authenticated_partial && !snapshot.safe_no_data() && !snapshot.rows.is_empty() {
+            snapshot.disclosures()?;
+        }
         if publish && actual != desired {
             bail!("reviewer_privacy_disclosures_mismatch");
         }
-        if !publish && actual == desired || publish && snapshot.published {
+        let proven_publish = prior.as_ref().is_some_and(|i| {
+            i.state == "confirmed"
+                && i.action == "collection_publish"
+                && i.generation == pin.generation
+                && i.publish_state_id == snapshot.publish_id
+                && i.desired.as_ref() == Some(&desired)
+                && i.confirmed_snapshot_digest.as_deref()
+                    == Some(snapshot.fingerprint(&app).as_str())
+                && i.publication_after.as_ref() == Some(&snapshot.publication)
+                && i.publication_before
+                    .as_ref()
+                    .is_some_and(|before| snapshot.publication.proves_new_publication(before))
+        });
+        if !publish && actual == desired || publish && proven_publish {
             return Ok(
                 json!({"app_id":app,"status":if publish {"published"} else {"draft_verified"},"already_present":true,"disclosures":snapshot.disclosures()?,"snapshot_digest":snapshot.fingerprint(&app),"published":snapshot.published}),
+            );
+        }
+        if publish && !snapshot.publication.valid_before() {
+            bail!(
+                "reviewer_privacy_publication_baseline_required: lastPublished is missing or invalid"
             );
         }
         let obsolete: Vec<UsageRow> = snapshot
@@ -452,11 +847,27 @@ impl Reviewer {
             publish_state_id: snapshot.publish_id.clone(),
             desired: Some(desired.clone()),
             previous_snapshot: Some(
-                json!({"rows":snapshot.rows,"snapshot_digest":expected,"published":snapshot.published}),
+                json!({"rows":snapshot.rows,"snapshot_digest":expected,"published":snapshot.published,"last_published":snapshot.publication.last_published,"last_published_status":snapshot.publication.last_published_status}),
             ),
             step: 0,
             total_steps,
             draft_was_unpublished: false,
+            recovery_snapshot_digest: if authenticated_partial {
+                Some(expected.clone())
+            } else {
+                None
+            },
+            archived_intent_fingerprint: prior
+                .as_ref()
+                .and_then(|i| i.archived_intent_fingerprint.clone()),
+            publication_before: if publish {
+                Some(snapshot.publication.clone())
+            } else {
+                None
+            },
+            publication_after: None,
+            confirmed_snapshot_digest: None,
+            last_error: None,
         };
         let mut operations = Vec::new();
         if publish {
@@ -501,13 +912,23 @@ impl Reviewer {
                 .pinned(&pin, method, self.url(&path, &[])?, payload, true)
                 .await
             {
+                intent.last_error = Some(privacy_failure(&error));
+                self.privacy_save(&intent)?;
                 if index == 0 && known_rejection(&error) {
                     intent.state = "rejected".into();
                     self.privacy_save(&intent)?;
                     bail!("reviewer_privacy_write_rejected: no retry was made");
                 }
                 bail!(
-                    "reviewer_privacy_outcome_unknown: a draft write may have completed; inspect with get_app_privacy_details; no write was retried"
+                    "reviewer_privacy_outcome_unknown: write may have completed; error_kind={}; http_status={}; inspect with get_app_privacy_details; no write was retried",
+                    intent.last_error.as_ref().unwrap().kind,
+                    intent
+                        .last_error
+                        .as_ref()
+                        .unwrap()
+                        .http_status
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "unknown".into())
                 );
             }
             let after = self.privacy_snapshot(&pin, &app).await.map_err(|_| {
@@ -556,6 +977,10 @@ impl Reviewer {
                 after.published
                     && after.publish_id == intent.publish_state_id
                     && before_rows == after_rows
+                    && intent
+                        .publication_before
+                        .as_ref()
+                        .is_some_and(|before| after.publication.proves_new_publication(before))
             };
             if !confirmed || after.publish_id != intent.publish_state_id {
                 bail!(
@@ -592,8 +1017,50 @@ impl Reviewer {
                 i.action.as_str(),
                 "declare" | "publish" | "collection_set" | "collection_publish"
             )
-            || !matches!(i.state.as_str(), "pending" | "confirmed" | "rejected")
+            || !matches!(
+                i.state.as_str(),
+                "pending" | "confirmed" | "rejected" | "partial_confirmed"
+            )
         {
+            bail!("reviewer_privacy_record_invalid");
+        }
+        if let Some(fingerprint) = &i.archived_intent_fingerprint {
+            if !valid_digest(fingerprint) {
+                bail!("reviewer_privacy_record_invalid");
+            }
+            let archive = self
+                .root
+                .join(format!("privacy-{app}-partial-{fingerprint}.json"));
+            let bytes = private_read(&archive, MAX_BODY)
+                .map_err(|_| anyhow::anyhow!("reviewer_privacy_archive_required"))?;
+            if digest(&bytes) != *fingerprint {
+                bail!("reviewer_privacy_archive_invalid");
+            }
+        }
+        if i.state == "partial_confirmed"
+            && (i.action != "collection_set"
+                || i.archived_intent_fingerprint.is_none()
+                || !i
+                    .recovery_snapshot_digest
+                    .as_deref()
+                    .is_some_and(valid_digest))
+        {
+            bail!("reviewer_privacy_record_invalid");
+        }
+        if i.last_error.as_ref().is_some_and(|e| {
+            !matches!(
+                e.kind.as_str(),
+                "authentication_source_changed"
+                    | "non_json"
+                    | "interrupted_response"
+                    | "oversized_response"
+                    | "redirect"
+                    | "server_error"
+                    | "http_rejected"
+                    | "transport"
+                    | "client_error"
+            ) || e.http_status.is_some_and(|s| !(100..600).contains(&s))
+        }) {
             bail!("reviewer_privacy_record_invalid");
         }
         let collection = matches!(i.action.as_str(), "collection_set" | "collection_publish");
@@ -739,6 +1206,19 @@ impl Reviewer {
             )
             .await?;
         let publish_id = resource_id(pin, &published["data"], "appDataUsagesPublishState")?;
+        let (last_published_status, last_published) =
+            match published.pointer("/data/attributes/lastPublished") {
+                None => (PublicationTimestampStatus::Missing, None),
+                Some(Value::Null) => (PublicationTimestampStatus::Null, None),
+                Some(Value::String(s)) if pin.public(s) => match DateTime::parse_from_rfc3339(s) {
+                    Ok(date) => (
+                        PublicationTimestampStatus::Valid,
+                        Some(date.with_timezone(&Utc)),
+                    ),
+                    Err(_) => (PublicationTimestampStatus::Invalid, None),
+                },
+                _ => (PublicationTimestampStatus::Invalid, None),
+            };
         let published = published["data"]["attributes"]["published"]
             .as_bool()
             .context("reviewer_privacy_schema_invalid")?;
@@ -749,6 +1229,11 @@ impl Reviewer {
             publish_id,
             published,
             rows,
+            publication: PublicationCheckpoint {
+                published,
+                last_published_status,
+                last_published,
+            },
         })
     }
     fn privacy_reconcile(&self, pin: &Pinned, s: &Snapshot, i: &mut Intent) -> Result<bool> {
@@ -764,13 +1249,20 @@ impl Reviewer {
             s.tuples().is_ok_and(|actual| actual == *desired)
                 && i.publish_state_id == s.publish_id
                 && (i.action == "collection_set" && (!i.draft_was_unpublished || !s.published)
-                    || i.action == "collection_publish" && s.published)
+                    || i.action == "collection_publish"
+                        && i.publication_before
+                            .as_ref()
+                            .is_some_and(|before| s.publication.proves_new_publication(before)))
         } else {
             s.safe_no_data()
                 && (i.action == "declare" || s.published && i.publish_state_id == s.publish_id)
         };
         if matches {
             i.state = "confirmed".into();
+            i.confirmed_snapshot_digest = Some(s.fingerprint(&i.app_id));
+            if i.action == "collection_publish" {
+                i.publication_after = Some(s.publication.clone());
+            }
             self.privacy_save(i)?;
             Ok(true)
         } else {
@@ -778,6 +1270,9 @@ impl Reviewer {
         }
     }
     pub(super) async fn privacy_call(&self, name: &str, args: &Value) -> Result<Value> {
+        if name == "acknowledge_app_privacy_partial" {
+            return self.privacy_acknowledge_partial(args).await;
+        }
         if name.ends_with("_collection") {
             return self.privacy_collection_call(name, args).await;
         }
@@ -807,9 +1302,20 @@ impl Reviewer {
         }
         let pending = prior.as_ref().is_some_and(|i| i.state == "pending");
         if read {
+            let intent_fingerprint = if prior.is_some() {
+                Some(digest(&self.privacy_intent_bytes(app)?))
+            } else {
+                None
+            };
             return Ok(
-                json!({"app_id":app,"usage_count":s.count,"data_not_collected":s.safe_no_data(),"published":s.published,"publish_state_id":s.publish_id,"rows":s.rows,"disclosures":s.disclosures().ok(),"snapshot_digest":s.fingerprint(app),"outcome_unknown":pending,"authentication_source_matches_intent":source_matches,"reconciliation":if reconciled {Some("desired_state_confirmed")}else{None}}),
+                json!({"app_id":app,"usage_count":s.count,"data_not_collected":s.safe_no_data(),"published":s.published,"publish_state_id":s.publish_id,"last_published":s.publication.last_published,"last_published_status":s.publication.last_published_status,"rows":s.rows,"disclosures":s.disclosures().ok(),"snapshot_digest":s.fingerprint(app),"intent_fingerprint":intent_fingerprint,"intent_state":prior.as_ref().map(|i|&i.state),"partial_confirmed":prior.as_ref().is_some_and(|i|i.state=="partial_confirmed"),"collection_complete":prior.as_ref().and_then(|i|i.desired.as_ref()).map(|d|s.tuples().is_ok_and(|t|t==*d)),"last_error":prior.as_ref().and_then(|i|i.last_error.as_ref()),"outcome_unknown":pending,"authentication_source_matches_intent":source_matches,"reconciliation":if reconciled {Some("desired_state_confirmed")}else{None}}),
             );
+        }
+        if prior
+            .as_ref()
+            .is_some_and(|i| i.state == "partial_confirmed")
+        {
+            bail!("reviewer_privacy_partial_collection_in_progress");
         }
         if pending {
             bail!(
@@ -837,6 +1343,12 @@ impl Reviewer {
             step: 0,
             total_steps: 1,
             draft_was_unpublished: false,
+            recovery_snapshot_digest: None,
+            archived_intent_fingerprint: None,
+            publication_before: None,
+            publication_after: None,
+            confirmed_snapshot_digest: None,
+            last_error: None,
         };
         self.privacy_save(&intent)?;
         let (method, path, payload) = if publish {

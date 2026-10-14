@@ -974,18 +974,24 @@ impl Reviewer {
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| {
             anyhow::anyhow!(if write {
-                "delivery_unknown: interrupted response"
+                format!(
+                    "delivery_unknown: interrupted response; HTTP {}",
+                    status.as_u16()
+                )
             } else {
-                "reviewer_response_invalid"
+                "reviewer_response_invalid".into()
             })
         })? {
             if chunk.len() > MAX_BODY - bytes.len() {
                 bail!(
                     "{}",
                     if write {
-                        "delivery_unknown: oversized response"
+                        format!(
+                            "delivery_unknown: oversized response; HTTP {}",
+                            status.as_u16()
+                        )
                     } else {
-                        "reviewer_response_invalid: oversized response"
+                        "reviewer_response_invalid: oversized response".into()
                     }
                 );
             }
@@ -1000,9 +1006,12 @@ impl Reviewer {
         }
         let data = serde_json::from_slice(&bytes).map_err(|_| {
             anyhow::anyhow!(if write {
-                "delivery_unknown: invalid JSON response"
+                format!(
+                    "delivery_unknown: invalid JSON response; HTTP {}",
+                    status.as_u16()
+                )
             } else {
-                "reviewer_response_invalid: expected JSON"
+                "reviewer_response_invalid: expected JSON".into()
             })
         })?;
         Ok(Raw {
@@ -1113,7 +1122,9 @@ impl Reviewer {
         // validates every field instead of the legacy string-only argument helper.
         if matches!(
             name,
-            "set_app_privacy_collection" | "publish_app_privacy_collection"
+            "set_app_privacy_collection"
+                | "publish_app_privacy_collection"
+                | "acknowledge_app_privacy_partial"
         ) {
             return self.privacy_call(name, args).await;
         }

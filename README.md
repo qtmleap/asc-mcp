@@ -228,6 +228,10 @@ The collection tools replace or publish an explicit complete disclosure matrix,
 with a fresh exact snapshot digest and separate confirmation. See
 [collection questionnaire editing](docs/privacy-collection.md) for the schemas,
 publish attestations, and conservative handling of partial draft writes.
+`acknowledge_app_privacy_partial` is an explicit GET-only Apple operation that
+archives and acknowledges a conclusively observed partial prefix locally. It
+does not retry writes or claim the full matrix complete. The next set is bound
+to the same original matrix, authentication source, and exact checkpoint.
 
 Set the existing credential variables:
 
@@ -538,5 +542,10 @@ its existing fields and adds `rows`, normalized `disclosures`, and `snapshot_dig
 Unsupported or mixed collection shapes remain visible as safe rows but cannot be
 edited or published by the collection tools. Full details are in
 [collection questionnaire editing](docs/privacy-collection.md).
+Collection publication additionally requires fresh `lastPublished` evidence;
+an unchanged old `published: true` flag cannot confirm a new publish or clear an
+unknown PATCH. Safe diagnostics expose only an allowlisted error kind and HTTP
+status. Original private records and their authentication generations are never
+returned through MCP.
 If saving a definitive rejection fails, the durable pending intent conservatively
 remains blocked until conclusive verification is possible.

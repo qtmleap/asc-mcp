@@ -21,6 +21,10 @@ struct Data {
     change_at_read: Option<usize>,
     swap_after_write: Option<PathBuf>,
     publish_after_write: Option<usize>,
+    last_published: Option<Value>,
+    advance_publish_time: bool,
+    keep_published_on_draft: bool,
+    fail_after_apply_at: Option<usize>,
 }
 fn no_data() -> Value {
     json!({"type":"appDataUsages","id":"old1","relationships":{"app":{"data":{"type":"apps","id":"123"}},"dataProtection":{"data":{"type":"appDataUsageDataProtections","id":"DATA_NOT_COLLECTED"}}}})
@@ -75,23 +79,40 @@ async fn handler(
             if s.publish_after_write == Some(s.writes.len()) {
                 s.published = true;
             }
-            json!({"data":{"type":"appDataUsagesPublishState","id":"pub1","attributes":{"published":s.published}}})
+            let mut attrs = json!({"published":s.published});
+            if let Some(value) = &s.last_published {
+                attrs["lastPublished"] = value.clone();
+            }
+            json!({"data":{"type":"appDataUsagesPublishState","id":"pub1","attributes":attrs}})
         }
         (Method::POST, "/iris/v1/appDataUsages") => {
             let mut item = s.writes.last().unwrap().2["data"].clone();
             item["id"] = json!(format!("new{}", s.writes.len()));
             s.usages.push(item.clone());
-            s.published = false;
+            if !s.keep_published_on_draft {
+                s.published = false;
+            }
+            if s.fail_after_apply_at == Some(s.writes.len()) {
+                return (StatusCode::CREATED, "not-json-after-committing".into());
+            }
             json!({"data":item})
         }
         (Method::DELETE, p) if p.starts_with("/iris/v1/appDataUsages/") => {
             let id = p.rsplit('/').next().unwrap();
             s.usages.retain(|r| r["id"] != id);
-            s.published = false;
+            if !s.keep_published_on_draft {
+                s.published = false;
+            }
             return (StatusCode::NO_CONTENT, String::new());
         }
         (Method::PATCH, "/iris/v1/appDataUsagesPublishState/pub1") => {
             s.published = true;
+            if s.advance_publish_time {
+                s.last_published = Some(json!("2026-10-15T12:00:00Z"));
+            }
+            if s.fail_after_apply_at == Some(s.writes.len()) {
+                return (StatusCode::INTERNAL_SERVER_ERROR, "{}".into());
+            }
             return (StatusCode::NO_CONTENT, String::new());
         }
         _ => return (StatusCode::NOT_FOUND, "{}".into()),
@@ -117,6 +138,10 @@ async fn setup() -> (
         change_at_read: None,
         swap_after_write: None,
         publish_after_write: None,
+        last_published: Some(json!("2026-10-01T00:00:00Z")),
+        advance_publish_time: true,
+        keep_published_on_draft: false,
+        fail_after_apply_at: None,
     }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -628,6 +653,524 @@ async fn collection_single_delete_postreadback_checkpoint_survives_pending_resta
             .await
             .is_err()
     );
+    assert_eq!(s.lock().unwrap().writes.len(), 10);
+    h.abort();
+}
+
+async fn acknowledge_args(r: &Reviewer, original: &[u8]) -> Value {
+    let read = r
+        .call("get_app_privacy_details", &json!({"app_id":"123"}))
+        .await
+        .unwrap();
+    json!({"app_id":"123","disclosures":disclosures(),"expected_intent_fingerprint":digest(original),"expected_snapshot_digest":read["snapshot_digest"],"confirmation":"ACKNOWLEDGE_CONFIRMED_APP_PRIVACY_PARTIAL","exclusive_editing_confirmed":true})
+}
+#[tokio::test]
+async fn recovery_acknowledges_applied_prefix_without_remote_writes_and_preserves_archive() {
+    let (_d, r, s, h) = setup().await;
+    {
+        let mut st = s.lock().unwrap();
+        st.keep_published_on_draft = true;
+        st.fail_after_apply_at = Some(2);
+    }
+    let a = args(&r, disclosures()).await;
+    assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+    let original = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+    let first_id = s.lock().unwrap().usages[0]["id"].clone();
+    let ack = acknowledge_args(&r, &original).await;
+    let result = r
+        .call("acknowledge_app_privacy_partial", &ack)
+        .await
+        .unwrap();
+    assert_eq!(result["status"], "partial_confirmed");
+    assert_eq!(result["collection_complete"], false);
+    assert_eq!(result["remote_writes"], 0);
+    assert_eq!(s.lock().unwrap().writes.len(), 2);
+    assert_eq!(
+        private_read(
+            &r.root
+                .join(format!("privacy-123-partial-{}.json", digest(&original))),
+            MAX_BODY
+        )
+        .unwrap(),
+        original
+    );
+    let a = args(&r, disclosures()).await;
+    r.call("set_app_privacy_collection", &a).await.unwrap();
+    let st = s.lock().unwrap();
+    assert_eq!(st.writes.len(), 9);
+    assert_eq!(st.usages.len(), 8);
+    assert_eq!(
+        st.usages
+            .iter()
+            .filter(|u| u["relationships"]["category"]["data"]["id"] == "COARSE_LOCATION")
+            .count(),
+        1
+    );
+    assert!(st.usages.iter().any(|u| u["id"] == first_id));
+    h.abort();
+}
+#[tokio::test]
+async fn publication_true_old_flag_requires_one_patch_and_a_new_publication_proof() {
+    let (_d, r, s, h) = setup().await;
+    s.lock().unwrap().keep_published_on_draft = true;
+    let a = args(&r, disclosures()).await;
+    let saved = r.call("set_app_privacy_collection", &a).await.unwrap();
+    let p = json!({"app_id":"123","disclosures":disclosures(),"expected_snapshot_digest":saved["snapshot_digest"],"confirmation":"PUBLISH_APP_PRIVACY_DISCLOSURES_ACCURATE","exclusive_editing_confirmed":true,"answers_accurate":true,"complies_with_app_store_guidelines_and_law":true,"will_update_if_changed":true});
+    r.call("publish_app_privacy_collection", &p).await.unwrap();
+    assert_eq!(s.lock().unwrap().writes.len(), 10);
+    let read = r
+        .call("get_app_privacy_details", &json!({"app_id":"123"}))
+        .await
+        .unwrap();
+    let mut repeat = p;
+    repeat["expected_snapshot_digest"] = read["snapshot_digest"].clone();
+    r.call("publish_app_privacy_collection", &repeat)
+        .await
+        .unwrap();
+    assert_eq!(s.lock().unwrap().writes.len(), 10);
+    h.abort();
+}
+
+#[tokio::test]
+async fn recovery_archive_conflict_preserves_original_pending_bytes_and_remote_state() {
+    let (_d, r, s, h) = setup().await;
+    s.lock().unwrap().fail_after_apply_at = Some(2);
+    let a = args(&r, disclosures()).await;
+    assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+    let original = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+    let archive = r
+        .root
+        .join(format!("privacy-123-partial-{}.json", digest(&original)));
+    write_private_atomic(&archive, b"conflicting archive").unwrap();
+    let ack = acknowledge_args(&r, &original).await;
+    assert!(
+        r.call("acknowledge_app_privacy_partial", &ack)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("archive_conflict")
+    );
+    assert_eq!(
+        private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap(),
+        original
+    );
+    assert_eq!(s.lock().unwrap().writes.len(), 2);
+    h.abort();
+}
+
+#[tokio::test]
+async fn recovery_refuses_stale_hashes_changed_matrix_and_absent_uncertain_post() {
+    for mode in 0..4 {
+        let (_d, r, s, h) = setup().await;
+        s.lock().unwrap().fail_after_apply_at = Some(2);
+        let a = args(&r, disclosures()).await;
+        assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+        let original = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+        if mode == 3 {
+            s.lock().unwrap().usages.clear();
+        }
+        let mut ack = acknowledge_args(&r, &original).await;
+        match mode {
+            0 => ack["expected_intent_fingerprint"] = json!("a".repeat(64)),
+            1 => ack["expected_snapshot_digest"] = json!("b".repeat(64)),
+            2 => ack["disclosures"][0]["linked_to_user"] = json!(false),
+            _ => {}
+        }
+        assert!(
+            r.call("acknowledge_app_privacy_partial", &ack)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap(),
+            original
+        );
+        assert_eq!(s.lock().unwrap().writes.len(), 2);
+        h.abort();
+    }
+}
+
+#[tokio::test]
+async fn recovery_checkpoint_survives_restart_and_blocks_other_mutations_or_changed_state() {
+    for mode in 0..3 {
+        let (d, r, s, h) = setup().await;
+        s.lock().unwrap().fail_after_apply_at = Some(2);
+        let a = args(&r, disclosures()).await;
+        assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+        let original = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+        let ack = acknowledge_args(&r, &original).await;
+        r.call("acknowledge_app_privacy_partial", &ack)
+            .await
+            .unwrap();
+        let restarted = Reviewer::for_test(r.origin.as_str(), d.path());
+        for name in ["declare_app_privacy_no_data", "publish_app_privacy_no_data"] {
+            assert!(
+                restarted
+                    .call(
+                        name,
+                        &json!({"app_id":"123","confirmation":"DATA_NOT_COLLECTED"})
+                    )
+                    .await
+                    .unwrap_err()
+                    .to_string()
+                    .contains("partial_collection")
+            );
+        }
+        let mut matrix = disclosures();
+        if mode == 0 {
+            matrix[0]["linked_to_user"] = json!(false);
+        }
+        if mode == 1 {
+            s.lock().unwrap().last_published = Some(json!("2026-10-02T00:00:00Z"));
+        }
+        if mode == 2 {
+            atomic_json(&restarted.cookie_path,&json!({"cookies":[{"name":"session","value":"replaced-source","domain":"apple.com","path":"/"}]})).unwrap();
+        }
+        let a = args(&restarted, matrix).await;
+        assert!(
+            restarted
+                .call("set_app_privacy_collection", &a)
+                .await
+                .is_err()
+        );
+        assert_eq!(s.lock().unwrap().writes.len(), 2);
+        h.abort();
+    }
+}
+
+#[tokio::test]
+async fn recovery_repeated_applied_post_failure_archives_subset_without_duplicate_creation() {
+    let (_d, r, s, h) = setup().await;
+    {
+        let mut st = s.lock().unwrap();
+        st.keep_published_on_draft = true;
+        st.fail_after_apply_at = Some(2);
+    }
+    let a = args(&r, disclosures()).await;
+    assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+    let first = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+    let ack = acknowledge_args(&r, &first).await;
+    r.call("acknowledge_app_privacy_partial", &ack)
+        .await
+        .unwrap();
+    s.lock().unwrap().fail_after_apply_at = Some(3);
+    let a = args(&r, disclosures()).await;
+    assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+    let read = r
+        .call("get_app_privacy_details", &json!({"app_id":"123"}))
+        .await
+        .unwrap();
+    assert_eq!(read["last_error"]["kind"], "non_json");
+    assert_eq!(read["last_error"]["http_status"], 201);
+    assert!(!read.to_string().contains("not-json-after-committing"));
+    let second = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+    let ack = acknowledge_args(&r, &second).await;
+    r.call("acknowledge_app_privacy_partial", &ack)
+        .await
+        .unwrap();
+    let a = args(&r, disclosures()).await;
+    r.call("set_app_privacy_collection", &a).await.unwrap();
+    let st = s.lock().unwrap();
+    assert_eq!(st.writes.len(), 9);
+    assert_eq!(st.usages.len(), 8);
+    let tuples = st
+        .usages
+        .iter()
+        .map(|u| u["relationships"].to_string())
+        .collect::<HashSet<_>>();
+    assert_eq!(tuples.len(), 8);
+    h.abort();
+}
+
+fn tracking_disclosures() -> Value {
+    json!([
+        {"category":"DEVICE_ID","purposes":["ANALYTICS","APP_FUNCTIONALITY"],"linked_to_user":true,"used_for_tracking":true},
+        {"category":"PRODUCT_INTERACTION","purposes":["ANALYTICS"],"linked_to_user":true,"used_for_tracking":false}
+    ])
+}
+
+#[tokio::test]
+async fn recovery_tracking_prefix_resumes_after_restart_and_another_unknown_post() {
+    let (d, r, s, h) = setup().await;
+    s.lock().unwrap().fail_after_apply_at = Some(4);
+    let a = args(&r, tracking_disclosures()).await;
+    assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+    assert_eq!(s.lock().unwrap().usages.len(), 3);
+    let first = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+    let mut ack = acknowledge_args(&r, &first).await;
+    ack["disclosures"] = tracking_disclosures();
+    r.call("acknowledge_app_privacy_partial", &ack)
+        .await
+        .unwrap();
+    assert_eq!(s.lock().unwrap().writes.len(), 4);
+
+    let restarted = Reviewer::for_test(r.origin.as_str(), d.path());
+    s.lock().unwrap().fail_after_apply_at = Some(5);
+    let a = args(&restarted, tracking_disclosures()).await;
+    let error = restarted
+        .call("set_app_privacy_collection", &a)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("outcome_unknown"), "{error}");
+    assert_eq!(s.lock().unwrap().writes.len(), 5);
+    let second = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+    let mut ack = acknowledge_args(&restarted, &second).await;
+    ack["disclosures"] = tracking_disclosures();
+    restarted
+        .call("acknowledge_app_privacy_partial", &ack)
+        .await
+        .unwrap();
+    assert_eq!(s.lock().unwrap().writes.len(), 5);
+    for original in [&first, &second] {
+        assert_eq!(
+            private_read(
+                &r.root
+                    .join(format!("privacy-123-partial-{}.json", digest(original))),
+                MAX_BODY
+            )
+            .unwrap(),
+            *original
+        );
+    }
+    let restarted = Reviewer::for_test(r.origin.as_str(), d.path());
+    let a = args(&restarted, tracking_disclosures()).await;
+    restarted
+        .call("set_app_privacy_collection", &a)
+        .await
+        .unwrap();
+    let st = s.lock().unwrap();
+    assert_eq!(st.writes.len(), 6);
+    assert_eq!(st.usages.len(), 5);
+    assert_eq!(
+        st.usages
+            .iter()
+            .map(|u| u["relationships"].to_string())
+            .collect::<HashSet<_>>()
+            .len(),
+        5
+    );
+    h.abort();
+}
+
+#[tokio::test]
+async fn recovery_external_tracking_prefix_without_checkpoint_is_refused() {
+    let (_d, r, s, h) = setup().await;
+    s.lock().unwrap().fail_after_apply_at = Some(4);
+    let a = args(&r, tracking_disclosures()).await;
+    assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+    // Identical external rows are not authority to continue an unrecorded batch.
+    let external = tempfile::tempdir().unwrap();
+    let r = Reviewer::for_test(r.origin.as_str(), external.path());
+    let a = args(&r, tracking_disclosures()).await;
+    assert!(
+        r.call("set_app_privacy_collection", &a)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("collection_schema_invalid")
+    );
+    assert_eq!(s.lock().unwrap().writes.len(), 4);
+    h.abort();
+}
+
+#[tokio::test]
+async fn recovery_tracking_continuation_rejects_corrupt_or_foreign_archive_provenance() {
+    for mode in 0..6 {
+        let (_d, r, s, h) = setup().await;
+        s.lock().unwrap().fail_after_apply_at = Some(4);
+        let a = args(&r, tracking_disclosures()).await;
+        assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+        let first = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+        let mut ack = acknowledge_args(&r, &first).await;
+        ack["disclosures"] = tracking_disclosures();
+        r.call("acknowledge_app_privacy_partial", &ack)
+            .await
+            .unwrap();
+        s.lock().unwrap().fail_after_apply_at = Some(5);
+        let a = args(&r, tracking_disclosures()).await;
+        assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+        let second = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+        let mut ack = acknowledge_args(&r, &second).await;
+        ack["disclosures"] = tracking_disclosures();
+        let mut current: Value = serde_json::from_slice(&second).unwrap();
+        if mode == 0 {
+            write_private_atomic(
+                &r.root
+                    .join(format!("privacy-123-partial-{}.json", digest(&first))),
+                b"corrupt archive",
+            )
+            .unwrap();
+        } else if mode == 5 {
+            current["recovery_snapshot_digest"] = json!("a".repeat(64));
+        } else {
+            let mut ancestor: Value = serde_json::from_slice(&first).unwrap();
+            match mode {
+                1 => ancestor["app_id"] = json!("456"),
+                2 => ancestor["generation"] = json!("foreign-source"),
+                3 => ancestor["publish_state_id"] = json!("pub2"),
+                4 => ancestor["desired"][0]["purpose"] = json!("OTHER_PURPOSES"),
+                _ => unreachable!(),
+            }
+            let bytes = serde_json::to_vec(&ancestor).unwrap();
+            let fingerprint = digest(&bytes);
+            write_private_atomic(
+                &r.root
+                    .join(format!("privacy-123-partial-{fingerprint}.json")),
+                &bytes,
+            )
+            .unwrap();
+            current["archived_intent_fingerprint"] = json!(fingerprint);
+        }
+        let current = serde_json::to_vec(&current).unwrap();
+        write_private_atomic(&r.root.join("privacy-123.json"), &current).unwrap();
+        ack["expected_intent_fingerprint"] = json!(digest(&current));
+        assert!(
+            r.call("acknowledge_app_privacy_partial", &ack)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap(),
+            current
+        );
+        assert_eq!(s.lock().unwrap().writes.len(), 5);
+        h.abort();
+    }
+}
+
+#[tokio::test]
+async fn recovery_archive_chain_bound_stops_before_any_more_remote_writes() {
+    let (_d, r, s, h) = setup().await;
+    let matrix = json!(["DEVICE_ID", "PRODUCT_INTERACTION", "OTHER_USAGE_DATA"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|category| json!({"category":category,"purposes":["THIRD_PARTY_ADVERTISING","DEVELOPERS_ADVERTISING","ANALYTICS","PRODUCT_PERSONALIZATION","APP_FUNCTIONALITY","OTHER_PURPOSES"],"linked_to_user":true,"used_for_tracking":true}))
+        .collect::<Vec<_>>();
+    let matrix = json!(matrix);
+    for completed in 1..=33 {
+        s.lock().unwrap().fail_after_apply_at = Some(completed + 1);
+        let a = args(&r, matrix.clone()).await;
+        assert!(r.call("set_app_privacy_collection", &a).await.is_err());
+        assert_eq!(s.lock().unwrap().writes.len(), completed + 1);
+        let original = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+        let mut ack = acknowledge_args(&r, &original).await;
+        ack["disclosures"] = matrix.clone();
+        r.call("acknowledge_app_privacy_partial", &ack)
+            .await
+            .unwrap();
+    }
+    let before = private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap();
+    let a = args(&r, matrix).await;
+    assert!(
+        r.call("set_app_privacy_collection", &a)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("recovery_provenance_invalid")
+    );
+    assert_eq!(s.lock().unwrap().writes.len(), 34);
+    assert_eq!(
+        private_read(&r.root.join("privacy-123.json"), MAX_BODY).unwrap(),
+        before
+    );
+    h.abort();
+}
+
+#[tokio::test]
+async fn publication_unknown_patch_cannot_reconcile_unchanged_old_true_flag() {
+    let (_d, r, s, h) = setup().await;
+    s.lock().unwrap().keep_published_on_draft = true;
+    let a = args(&r, disclosures()).await;
+    let saved = r.call("set_app_privacy_collection", &a).await.unwrap();
+    s.lock().unwrap().fail_at = Some(10);
+    let p = json!({"app_id":"123","disclosures":disclosures(),"expected_snapshot_digest":saved["snapshot_digest"],"confirmation":"PUBLISH_APP_PRIVACY_DISCLOSURES_ACCURATE","exclusive_editing_confirmed":true,"answers_accurate":true,"complies_with_app_store_guidelines_and_law":true,"will_update_if_changed":true});
+    assert!(r.call("publish_app_privacy_collection", &p).await.is_err());
+    let read = r
+        .call("get_app_privacy_details", &json!({"app_id":"123"}))
+        .await
+        .unwrap();
+    assert_eq!(read["outcome_unknown"], true);
+    assert!(r.call("publish_app_privacy_collection", &p).await.is_err());
+    assert_eq!(s.lock().unwrap().writes.len(), 10);
+    h.abort();
+}
+
+#[tokio::test]
+async fn publication_requires_valid_baseline_and_refuses_unchanged_timestamp_after_success() {
+    for mode in 0..4 {
+        let (_d, r, s, h) = setup().await;
+        s.lock().unwrap().keep_published_on_draft = true;
+        let a = args(&r, disclosures()).await;
+        r.call("set_app_privacy_collection", &a).await.unwrap();
+        {
+            let mut st = s.lock().unwrap();
+            match mode {
+                0 => st.last_published = None,
+                1 => st.last_published = Some(json!("secret-sentinel")),
+                2 => st.last_published = Some(Value::Null),
+                _ => st.advance_publish_time = false,
+            }
+        }
+        let read = r
+            .call("get_app_privacy_details", &json!({"app_id":"123"}))
+            .await
+            .unwrap();
+        assert!(!read.to_string().contains("secret-sentinel"));
+        let p = json!({"app_id":"123","disclosures":disclosures(),"expected_snapshot_digest":read["snapshot_digest"],"confirmation":"PUBLISH_APP_PRIVACY_DISCLOSURES_ACCURATE","exclusive_editing_confirmed":true,"answers_accurate":true,"complies_with_app_store_guidelines_and_law":true,"will_update_if_changed":true});
+        assert!(r.call("publish_app_privacy_collection", &p).await.is_err());
+        assert_eq!(
+            s.lock().unwrap().writes.len(),
+            if mode == 3 { 10 } else { 9 }
+        );
+        if mode == 3 {
+            assert_eq!(
+                r.call("get_app_privacy_details", &json!({"app_id":"123"}))
+                    .await
+                    .unwrap()["outcome_unknown"],
+                true
+            );
+        }
+        h.abort();
+    }
+}
+
+#[tokio::test]
+async fn publication_explicit_null_unpublished_baseline_supports_first_publish() {
+    let (_d, r, s, h) = setup().await;
+    let a = args(&r, disclosures()).await;
+    r.call("set_app_privacy_collection", &a).await.unwrap();
+    s.lock().unwrap().last_published = Some(Value::Null);
+    let read = r
+        .call("get_app_privacy_details", &json!({"app_id":"123"}))
+        .await
+        .unwrap();
+    let p = json!({"app_id":"123","disclosures":disclosures(),"expected_snapshot_digest":read["snapshot_digest"],"confirmation":"PUBLISH_APP_PRIVACY_DISCLOSURES_ACCURATE","exclusive_editing_confirmed":true,"answers_accurate":true,"complies_with_app_store_guidelines_and_law":true,"will_update_if_changed":true});
+    assert_eq!(
+        r.call("publish_app_privacy_collection", &p).await.unwrap()["status"],
+        "published"
+    );
+    assert_eq!(s.lock().unwrap().writes.len(), 10);
+    h.abort();
+}
+
+#[tokio::test]
+async fn publication_applied_error_reconciles_only_advancing_timestamp_without_retry() {
+    let (_d, r, s, h) = setup().await;
+    s.lock().unwrap().keep_published_on_draft = true;
+    let a = args(&r, disclosures()).await;
+    let saved = r.call("set_app_privacy_collection", &a).await.unwrap();
+    s.lock().unwrap().fail_after_apply_at = Some(10);
+    let mut p = json!({"app_id":"123","disclosures":disclosures(),"expected_snapshot_digest":saved["snapshot_digest"],"confirmation":"PUBLISH_APP_PRIVACY_DISCLOSURES_ACCURATE","exclusive_editing_confirmed":true,"answers_accurate":true,"complies_with_app_store_guidelines_and_law":true,"will_update_if_changed":true});
+    assert!(r.call("publish_app_privacy_collection", &p).await.is_err());
+    let read = r
+        .call("get_app_privacy_details", &json!({"app_id":"123"}))
+        .await
+        .unwrap();
+    assert_eq!(read["outcome_unknown"], false);
+    assert_eq!(read["reconciliation"], "desired_state_confirmed");
+    p["expected_snapshot_digest"] = read["snapshot_digest"].clone();
+    r.call("publish_app_privacy_collection", &p).await.unwrap();
     assert_eq!(s.lock().unwrap().writes.len(), 10);
     h.abort();
 }
