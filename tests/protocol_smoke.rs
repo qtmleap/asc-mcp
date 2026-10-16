@@ -50,7 +50,7 @@ fn native_binary_stdio_catalogue_and_error_contract() {
         .collect();
     assert_eq!(values.len(), 3);
     let catalogue = values.iter().find(|v| v["id"] == 2).unwrap();
-    assert_eq!(catalogue["result"]["tools"].as_array().unwrap().len(), 365);
+    assert_eq!(catalogue["result"]["tools"].as_array().unwrap().len(), 367);
     assert_eq!(
         values.iter().find(|v| v["id"] == 3).unwrap()["error"]["code"],
         -32601

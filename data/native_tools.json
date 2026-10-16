@@ -331,5 +331,51 @@
       "idempotentHint": true,
       "openWorldHint": true
     }
+  },
+  {
+    "name": "add_builds_to_beta_group",
+    "description": "Additively link existing builds to a TestFlight beta group (POST; existing group membership is preserved). A 204 success is returned as status:success. Before retrying an uncertain write, read back with list_beta_groups (include builds) or list_builds filtered by betaGroups. Embedded include=builds is partial when the paging total exceeds the returned count; for negative checks use a focused list_builds betaGroups filter.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "beta_group_id": {
+          "type": "string",
+          "description": "The beta group ID"
+        },
+        "build_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Build resource IDs to add; not build numbers"
+        }
+      },
+      "required": ["beta_group_id", "build_ids"]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "create_beta_build_notification",
+    "description": "Send the TestFlight build notification (POST /v1/buildBetaNotifications) for one build. This notifies all assigned, eligible TestFlight testers; it does not guarantee delivery or a particular testing state. The write is not idempotent and is never retried automatically on any error. If the outcome is uncertain (timeout, transport failure or unexpected response), reconcile with get_build or list_builds and the build's beta state before retrying.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "build_id": {
+          "type": "string",
+          "description": "The build resource ID; not a build number"
+        }
+      },
+      "required": ["build_id"]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
   }
 ]

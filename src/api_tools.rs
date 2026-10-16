@@ -589,6 +589,35 @@ pub fn validate_supported_arguments(name: &str, args: &Value) -> Result<()> {
             "get_beta_build_usage_metrics: limit requires grouping or filters that this tool does not expose; omit limit"
         )
     }
+    if name == "create_beta_build_notification" {
+        let id = args["build_id"]
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+            .context("build_id must be a nonblank string")?;
+        resource_segment(id)?;
+    }
+    if name == "add_builds_to_beta_group" {
+        if args["beta_group_id"]
+            .as_str()
+            .is_none_or(|s| s.trim().is_empty())
+        {
+            bail!("beta_group_id must be a nonblank string");
+        }
+        let ids = args["build_ids"]
+            .as_array()
+            .context("build_ids must be a nonempty array of strings")?;
+        if ids.is_empty()
+            || ids
+                .iter()
+                .any(|v| v.as_str().is_none_or(|s| s.trim().is_empty()))
+        {
+            bail!("build_ids must be a nonempty array of nonblank strings");
+        }
+        resource_segment(args["beta_group_id"].as_str().unwrap())?;
+        for id in ids {
+            resource_segment(id.as_str().unwrap())?;
+        }
+    }
     let recipe = recipes()
         .get(name)
         .with_context(|| format!("unknown tool: {name}"))?;
@@ -791,6 +820,9 @@ pub async fn call(client: &ApiClient, name: &str, args: &Value) -> Result<Value>
     } else {
         Vec::new()
     };
+    if name == "create_beta_build_notification" {
+        return notify_build(client, &request.method, path, request.body).await;
+    }
     let response = if name == "submit_app_for_review" {
         review_step(client, &request.method, path, query, request.body, std::time::Duration::from_secs(45)).await
     } else {
@@ -828,6 +860,42 @@ pub async fn call(client: &ApiClient, name: &str, args: &Value) -> Result<Value>
                 format!("review submission {id} created and version attached; failed to submit; verify this submission before retrying"), cause)));
     }
     Ok(response)
+}
+
+/// One non-idempotent notification POST. Only a 201 carrying a well-formed
+/// buildBetaNotifications resource is success; anything else that may have
+/// reached Apple is reported as an uncertain outcome without echoing the body.
+async fn notify_build(
+    client: &ApiClient,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+) -> Result<Value> {
+    const UNCERTAIN: &str = "outcome uncertain: the notification may have been sent; reconcile with get_build or list_builds before retrying";
+    let response = match client.raw_request(method, path, Vec::new(), body).await {
+        Ok(r) => r,
+        Err(e) => {
+            let definitive = e
+                .downcast_ref::<crate::api_error::ApiError>()
+                .is_some_and(|a| a.status < 500);
+            return Err(if definitive { e } else { e.context(UNCERTAIN) });
+        }
+    };
+    let parsed = (response.status == 201)
+        .then(|| serde_json::from_slice::<Value>(&response.body).ok())
+        .flatten()
+        .filter(|v| {
+            v["data"]["type"] == "buildBetaNotifications"
+                && v["data"]["id"]
+                    .as_str()
+                    .is_some_and(|s| !s.trim().is_empty())
+        });
+    parsed.ok_or_else(|| {
+        anyhow::anyhow!(
+            "unexpected App Store Connect response (HTTP {}) to the build notification; {UNCERTAIN}",
+            response.status
+        )
+    })
 }
 
 // Finish each review step before the outer MCP deadline, preserving draft IDs

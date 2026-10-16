@@ -494,5 +494,87 @@
     "query_maps": [],
     "query_map_overrides": [],
     "legacy_ignored": []
+  },
+  "add_builds_to_beta_group": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": { "op": "literal", "value": "POST" },
+        "path": {
+          "op": "format",
+          "name": "beta_group_id",
+          "prefix": "/v1/betaGroups/",
+          "suffix": "/relationships/builds",
+          "encode_path": true
+        },
+        "query": { "op": "object", "fields": {} },
+        "body": {
+          "op": "object",
+          "fields": {
+            "data": {
+              "op": "each",
+              "name": "build_ids",
+              "value": {
+                "op": "object",
+                "fields": {
+                  "type": { "op": "literal", "value": "builds" },
+                  "id": { "op": "item" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "used": ["beta_group_id", "build_ids"],
+    "supports_cursor": false,
+    "query_maps": [],
+    "query_map_overrides": [],
+    "legacy_ignored": []
+  },
+  "create_beta_build_notification": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": { "op": "literal", "value": "POST" },
+        "path": { "op": "literal", "value": "/v1/buildBetaNotifications" },
+        "query": { "op": "object", "fields": {} },
+        "body": {
+          "op": "object",
+          "fields": {
+            "data": {
+              "op": "object",
+              "fields": {
+                "type": { "op": "literal", "value": "buildBetaNotifications" },
+                "relationships": {
+                  "op": "object",
+                  "fields": {
+                    "build": {
+                      "op": "object",
+                      "fields": {
+                        "data": {
+                          "op": "object",
+                          "fields": {
+                            "type": { "op": "literal", "value": "builds" },
+                            "id": { "op": "arg", "name": "build_id" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "used": ["build_id"],
+    "supports_cursor": false,
+    "query_maps": [],
+    "query_map_overrides": [],
+    "legacy_ignored": []
   }
 }

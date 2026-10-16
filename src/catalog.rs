@@ -191,12 +191,12 @@ mod tests {
     use super::*;
     #[test]
     fn exact_exported_catalogue() {
-        assert_eq!(tools().len(), 365);
+        assert_eq!(tools().len(), 367);
         let names: std::collections::HashSet<_> = catalogue()
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
-        assert_eq!(names.len(), 365);
+        assert_eq!(names.len(), 367);
         assert!(
             find("list_apps").unwrap()["annotations"]["readOnlyHint"]
                 .as_bool()
