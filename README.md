@@ -88,7 +88,7 @@ from this Mac use `http://127.0.0.1:8878/mcp`.
 
 The Apple ID session below means an authenticated **App Store Connect web
 session**, not this chat or an official API-key JWT. The current server exposes
-seventeen session-backed tools with a session alone (five status tools, five conversation/monitor tools, four reply/recovery tools and three App Privacy tools). It adds 363 public API tools (356 legacy and seven native additions) when
+twenty-one session-backed tools with a session alone (five status tools, five conversation/monitor tools, four reply/recovery tools and seven App Privacy tools). It adds 365 public API tools (356 legacy and nine native additions) when
 team API credentials are configured; actual access depends on Apple's role
 permissions. Having a key does not grant every tool permission.
 
@@ -191,7 +191,7 @@ versions, review submission, screenshots/previews, TestFlight, provisioning,
 commerce, Game Center, reporting, analytics, Xcode Cloud, webhooks and assets.
 The complete runtime catalogue is available with `asc-mcp tools`.
 
-Seven additions bring the public catalogue to **363 tools**:
+Nine additions bring the public catalogue to **365 tools**:
 
 - `get_app_store_version_build` reads the related selected build.
 - `set_app_store_version_build` selects a processed, eligible build by resource ID. A successful 204 response returns `{"status":"success"}`; read back the selection before retrying an uncertain write.
@@ -218,11 +218,24 @@ An unknown write outcome requires a read-back check. Writes are never retried
 automatically. App Privacy questionnaire answers have no supported public API
 in the bundled Apple schema. With the existing Apple ID reviewer session enabled,
 `get_app_privacy_details`, `declare_app_privacy_no_data`, and
-`publish_app_privacy_no_data` use the private Iris routes implemented by fastlane
-2.239.0. The write tools require `confirmation: "DATA_NOT_COLLECTED"`, refuse
+`publish_app_privacy_no_data`, `set_app_privacy_collection`, and
+`publish_app_privacy_collection` use the private Iris routes implemented by fastlane
+2.239.0. The No Data write tools require `confirmation: "DATA_NOT_COLLECTED"`, refuse
 existing collection disclosures, and never delete them. A durable uncertain-write
 record blocks retries until a GET conclusively confirms the desired state.
 These routes are not covered by Apple's public API compatibility guarantees.
+The collection tools replace or publish an explicit complete disclosure matrix,
+with a fresh exact snapshot digest and separate confirmation. See
+[collection questionnaire editing](docs/privacy-collection.md) for the schemas,
+publish attestations, and conservative handling of partial draft writes.
+`acknowledge_app_privacy_partial` is an explicit GET-only Apple operation that
+archives and acknowledges a conclusively observed partial prefix locally. It
+does not retry writes or claim the full matrix complete. The next set is bound
+to the same original matrix, authentication source, and exact checkpoint.
+`acknowledge_app_privacy_published_goal` is a separate GET-only recovery for an
+unchanged already-published goal in a versionless legacy pending publish record.
+It archives the original bytes and records explicit goal acknowledgment, without
+claiming historical HTTP acceptance or a new publication.
 
 Set the existing credential variables:
 
@@ -241,6 +254,102 @@ storage requests without forwarding the API JWT/cookies.
 Validation checks local configuration; it is not proof of live Apple access.
 Tool calls still affect production App Store Connect data when supplied with
 valid credentials and permissions.
+
+The native additions also include `get_app_usage_report` and `get_app_crash_report`,
+described below.
+
+### Apple crash and usage reports
+
+Apple collects App Store diagnostics and usage data without an analytics SDK in
+your app. The native `get_app_usage_report` and `get_app_crash_report` tools read
+Apple's Analytics Reports API, download its report segments, and return parsed
+metrics with the reporting date, processing date, granularity and source IDs.
+They supplement the original public catalogue; they do not replace its tools.
+
+Both tools require `app_id`. Optional `report_date` is the **event date**, not
+the processing date; omitting it selects the latest available event date.
+`granularity` accepts `DAILY` (default), `WEEKLY` or `MONTHLY`. Weekly dates refer
+to Monday and monthly dates to the first day of the month. For example, use
+`get_app_usage_report` with `{"app_id":"6749347474","granularity":"DAILY"}`
+to inspect Interceptor's latest App Store usage report, or use
+`get_app_crash_report` with the same arguments for crash counts.
+
+Usage rows include sessions and Apple's unique-device count for each reported
+combination of date, app version, device and other dimensions. Crash rows include
+crashes and the number of devices that crashed. Unique-device counts are **not
+additive** across rows or dates, so `unique_devices_total` is `null` rather than
+an inflated estimate. These are opt-in device metrics, not a count of all users
+or installations. No device identifiers or capture contents are collected by
+this server or added to the app.
+
+Before the first use:
+
+1. Configure a **team API key with Admin access** using the existing
+   `ASC_ISSUER_ID`, `ASC_KEY_ID` and `ASC_PRIVATE_KEY_PATH` settings. Keep the
+   `.p8` in the private credentials bind, never in Git or a chat message.
+2. Call `list_analytics_report_requests` for the app. If there is no active
+   `ONGOING` request, explicitly call `create_analytics_report_request` with
+   `{"app_id":"6749347474","access_type":"ONGOING"}`. Reading a report never
+   creates a request or changes Apple-side settings.
+3. Allow approximately 24–48 hours for Apple to generate the first reports.
+   Once requests exist, Admin, Sales and Reports, or Finance keys can read
+   generated reports. App Manager alone does not grant Analytics Reports access.
+
+Results distinguish available data, generation/setup pending, missing data,
+unavailable data and permission failures. Missing reports are not reported as
+zero usage or zero crashes. App Sessions and App Crashes include only people
+who agreed to share diagnostics, have privacy thresholds, and may take five
+days to finalize daily data. Weekly and monthly reports are complete when
+published; later corrections can still replace previously published data.
+For a reporting date, newer processing-date data replaces older data instead
+of being added to it.
+
+TestFlight uses separate existing tools: `get_beta_build_usage_metrics` returns
+build-level installs, sessions and crashes; `list_beta_feedback_crashes` and
+`get_beta_feedback_crash_log` read submitted crash feedback. An empty feedback
+list is not proof that a build has never crashed. For symbolicated production
+stack traces, use Xcode's Crashes Organizer with the matching archive/dSYMs;
+the App Crashes analytics report contains aggregate counts, not stack traces.
+
+Reads are bounded to 25,000 parsed rows and 2,000 returned rows, with 32 MiB
+compressed and 64 MiB expanded data per call. Results expose the limits and flag
+truncated rows; complete additive totals still include all rows for the date.
+Exceeding a processing limit returns `unavailable`, not a partial total.
+
+Instance metadata is read in full (up to 2,000 instances, at most 10 pages of 200)
+before sorting newest `processingDate` first; a larger list is `unavailable`.
+Segments are then downloaded only until the result is settled: the default search
+stops once the next `processingDate` is earlier than the greatest event date
+already seen, or equals it but is older than the winning processing date
+(an instance cannot hold event dates after its own processing date),
+and an explicit `report_date` search stops once the next `processingDate` is
+earlier than that date or than the processing date of the partition already
+resolved. Only the winning date partition is retained, and it is replaced as a
+whole. A `report_date` later than every `processingDate` is `no_data` without
+downloading segments; rows dated after their own instance's `processingDate` make
+the result `unavailable`. Two instances with the same `processingDate` holding the
+selected event date are `unavailable` rather than arbitrarily chosen, but such an
+overlap on a date that a different instance supersedes is ignored.
+
+Segment gzip CRC and exact size are always checked, and a present checksum must
+match. If any selected segment has no checksum, the result is still returned with
+`provenance.checksum_verified: false` and a warning; otherwise it is `true`. A
+blank optional `Total Session Duration` cell is omitted; a malformed non-empty one
+makes the result `unavailable`.
+
+Omit `limit` when calling `get_beta_build_usage_metrics`. Apple rejects it
+unless grouping or filtering is used, and those options are not
+exposed by this server.
+
+Signed segment downloads require direct HTTPS access. The isolated downloader
+does not use proxy environment variables, cookies, redirects or API credentials;
+networks requiring a mandatory proxy cannot retrieve these segments.
+
+References: [requesting and downloading reports](https://developer.apple.com/documentation/appstoreconnectapi/downloading-analytics-reports),
+[App Sessions](https://developer.apple.com/documentation/analytics-reports/app-sessions),
+[App Crashes](https://developer.apple.com/documentation/analytics-reports/app-crashes),
+[data corrections](https://developer.apple.com/documentation/analytics-reports/data-completeness-corrections)
+and [Apple crash reports](https://developer.apple.com/documentation/xcode/acquiring-crash-reports-and-diagnostic-logs).
 
 ## Reviewer tools and CLI
 
@@ -431,5 +540,17 @@ An empty or conflicting readback does not clear the intent. After the authentica
 source changes, status is still readable and reports
 `authentication_source_matches_intent: false`, but the old intent stays blocked.
 Do not delete a pending intent file or retry its mutation to resolve uncertainty.
+The same private lock and intent record protect collection edits and publication:
+an uncertain collection write also blocks the No Data tools. The read tool retains
+its existing fields and adds `rows`, normalized `disclosures`, and `snapshot_digest`.
+Unsupported or mixed collection shapes remain visible as safe rows but cannot be
+edited or published by the collection tools. Full details are in
+[collection questionnaire editing](docs/privacy-collection.md).
+Collection publication records a successful HTTP receipt before readback and
+distinguishes an accepted current published goal from a verified new publication;
+an unchanged old `published: true` flag alone cannot confirm a new publish or clear an
+unknown PATCH. Safe diagnostics expose only an allowlisted error kind and HTTP
+status. Original private records and their authentication generations are never
+returned through MCP.
 If saving a definitive rejection fails, the durable pending intent conservatively
 remains blocked until conclusive verification is possible.

@@ -7,6 +7,45 @@ use httpmock::{
     MockServer,
 };
 use serde_json::json;
+
+#[tokio::test]
+async fn beta_usage_rejects_ungrouped_limit_and_reads_default_counts() {
+    // Apple rejects limit without groupBy/filter; this tool exposes neither.
+    assert!(
+        prepare_request(
+            "get_beta_build_usage_metrics",
+            &json!({"build_id":"build1","limit":20})
+        )
+        .is_err()
+    );
+    let server = MockServer::start_async().await;
+    let metrics = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/v1/builds/build1/metrics/betaBuildUsages")
+                .query_param_missing("limit");
+            then.status(200).json_body(json!({
+                "data":[{"type":"betaBuildUsages","dataPoints":[{
+                    "start":"2026-10-01","end":"2026-10-14",
+                    "values":{"installCount":2,"sessionCount":10,"crashCount":0}
+                }]}]
+            }));
+        })
+        .await;
+    let client = ApiClient::with_endpoint(&server.base_url()).unwrap();
+    let value = call(
+        &client,
+        "get_beta_build_usage_metrics",
+        &json!({"build_id":"build1"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        value["data"][0]["dataPoints"][0]["values"]["sessionCount"],
+        10
+    );
+    metrics.assert_calls_async(1).await;
+}
 #[tokio::test]
 async fn submit_review_performs_all_three_steps() {
     let server = MockServer::start_async().await;

@@ -259,5 +259,77 @@
       "destructiveHint": false,
       "openWorldHint": true
     }
+  },
+  {
+    "name": "get_app_usage_report",
+    "description": "Read the app's App Sessions (Standard) analytics report from an EXISTING Apple analytics report request; it never creates requests. Returns one event date's rows (Date, App Version, Device, Platform Version and other standard dimensions with sessions and unique_devices), sessions_total, and request/report/instance/segment provenance. The newest processingDate instance replaces the whole event date. unique_devices_total is always null because devices are not additive. status is available, pending (no report request/reports/instances yet; action says what to do), no_data, unavailable (corrupt or over-limit data; never partial totals) or permission_denied. Data covers only opted-in users and Apple's privacy threshold; daily data completes within five days.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "app_id": {
+          "type": "string",
+          "description": "The App Store Connect app ID (also the App Apple Identifier)"
+        },
+        "report_date": {
+          "type": "string",
+          "description": "Event date YYYY-MM-DD, not in the future. WEEKLY needs a Monday, MONTHLY the first of a month. Defaults to the latest event date available."
+        },
+        "granularity": {
+          "type": "string",
+          "enum": [
+            "DAILY",
+            "WEEKLY",
+            "MONTHLY"
+          ],
+          "description": "Instance granularity; defaults to DAILY"
+        }
+      },
+      "required": [
+        "app_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "get_app_crash_report",
+    "description": "Read the app's App Crashes analytics report from an EXISTING Apple analytics report request; it never creates requests. Returns one event date's rows (Date, App Version, Device, Platform Version with crashes and unique_devices), crashes_total, and request/report/instance/segment provenance. The newest processingDate instance replaces the whole event date. unique_devices_total is always null because devices are not additive. status is available, pending (no report request/reports/instances yet; action says what to do), no_data, unavailable (corrupt or over-limit data; never partial totals) or permission_denied. Data covers only opted-in users and Apple's privacy threshold; daily data completes within five days.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "app_id": {
+          "type": "string",
+          "description": "The App Store Connect app ID (also the App Apple Identifier)"
+        },
+        "report_date": {
+          "type": "string",
+          "description": "Event date YYYY-MM-DD, not in the future. WEEKLY needs a Monday, MONTHLY the first of a month. Defaults to the latest event date available."
+        },
+        "granularity": {
+          "type": "string",
+          "enum": [
+            "DAILY",
+            "WEEKLY",
+            "MONTHLY"
+          ],
+          "description": "Instance granularity; defaults to DAILY"
+        }
+      },
+      "required": [
+        "app_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
   }
 ]
