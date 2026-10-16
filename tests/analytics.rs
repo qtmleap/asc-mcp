@@ -218,7 +218,7 @@ async fn correction_replaces_the_entire_date_partition_including_removed_dimensi
 async fn tools_are_listed_read_only_with_app_id_required_and_legacy_catalogue_kept() {
     let m = MockServer::start_async().await;
     let tools = server_for(&m).tools();
-    assert_eq!(tools.len(), 365);
+    assert_eq!(tools.len(), 366);
     for name in ["get_app_usage_report", "get_app_crash_report"] {
         let t = tools.iter().find(|t| t["name"] == name).expect(name);
         assert_eq!(t["inputSchema"]["required"], json!(["app_id"]));

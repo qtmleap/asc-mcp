@@ -494,5 +494,43 @@
     "query_maps": [],
     "query_map_overrides": [],
     "legacy_ignored": []
+  },
+  "add_builds_to_beta_group": {
+    "kind": "request",
+    "request": {
+      "op": "object",
+      "fields": {
+        "method": { "op": "literal", "value": "POST" },
+        "path": {
+          "op": "format",
+          "name": "beta_group_id",
+          "prefix": "/v1/betaGroups/",
+          "suffix": "/relationships/builds",
+          "encode_path": true
+        },
+        "query": { "op": "object", "fields": {} },
+        "body": {
+          "op": "object",
+          "fields": {
+            "data": {
+              "op": "each",
+              "name": "build_ids",
+              "value": {
+                "op": "object",
+                "fields": {
+                  "type": { "op": "literal", "value": "builds" },
+                  "id": { "op": "item" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "used": ["beta_group_id", "build_ids"],
+    "supports_cursor": false,
+    "query_maps": [],
+    "query_map_overrides": [],
+    "legacy_ignored": []
   }
 }

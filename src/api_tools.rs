@@ -589,6 +589,28 @@ pub fn validate_supported_arguments(name: &str, args: &Value) -> Result<()> {
             "get_beta_build_usage_metrics: limit requires grouping or filters that this tool does not expose; omit limit"
         )
     }
+    if name == "add_builds_to_beta_group" {
+        if args["beta_group_id"]
+            .as_str()
+            .is_none_or(|s| s.trim().is_empty())
+        {
+            bail!("beta_group_id must be a nonblank string");
+        }
+        let ids = args["build_ids"]
+            .as_array()
+            .context("build_ids must be a nonempty array of strings")?;
+        if ids.is_empty()
+            || ids
+                .iter()
+                .any(|v| v.as_str().is_none_or(|s| s.trim().is_empty()))
+        {
+            bail!("build_ids must be a nonempty array of nonblank strings");
+        }
+        resource_segment(args["beta_group_id"].as_str().unwrap())?;
+        for id in ids {
+            resource_segment(id.as_str().unwrap())?;
+        }
+    }
     let recipe = recipes()
         .get(name)
         .with_context(|| format!("unknown tool: {name}"))?;
