@@ -63,6 +63,16 @@ key. Set `ASC_REVIEW_APP_ID` only for message monitoring. The legacy
 `reply_reviewer_message` is experimental, disabled and unverified; see
 [native login](docs/rust-login.md) and [reviewer monitoring](docs/rust-reviewer.md).
 
+## Experimental App Group tools
+
+App Group registration uses a separate Developer Portal session, not the public
+API key or reviewer session. Explicitly opt in with
+`ASC_DEVELOPER_APP_GROUPS_ENABLED=true`. Native and Docker login instructions,
+confirmation requirements and write-recovery limitations are in
+[Developer Portal setup](docs/developer-portal.md). Enabling the feature does not
+log in or mutate an Apple resource. Developer-only configuration supports `tools`,
+`validate` and the MCP server without public API credentials.
+
 ## Checks
 
 ```sh

@@ -14,6 +14,10 @@ This guide builds, starts, validates and manages the MCP server with Docker
 Compose. The macOS login-helper prerequisite is described separately below;
 native development is covered in [SETUP.md](SETUP.md).
 
+Experimental App Group registration and iOS App ID association have a separate
+opt-in and interactive Developer Portal login; see
+[Developer Portal setup and safety limits](docs/developer-portal.md).
+
 ## Quick start (Docker)
 
 Prerequisites: Docker with Linux containers, Compose 2.30+ with BuildKit, Git,

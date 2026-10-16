@@ -248,6 +248,7 @@ mod tests {
             Arc::new(Server {
                 api: None,
                 reviewer: None,
+                developer: None,
             }),
             Options {
                 allowed_origins: vec!["https://example.test".into()],
