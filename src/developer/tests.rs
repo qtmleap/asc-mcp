@@ -410,6 +410,9 @@ struct FixtureState {
     mutation_count: usize,
     captured: Vec<(String, String, bool, bool)>,
     detail_count: usize,
+    old_name: Option<String>,
+    fail_detail_on: Option<usize>,
+    change_detail_on: Option<usize>,
     replace_on_detail: Option<(usize, std::path::PathBuf, Vec<u8>)>,
 }
 
@@ -436,10 +439,11 @@ impl StatefulFixture {
                 state.captured.push((path.clone(),form,authorization,csrf));
                 if path.ends_with("getAppIdDetail.action") {
                     state.detail_count += 1;
+                    if state.change_detail_on == Some(state.detail_count) { state.associated = true; }
                     if let Some((count,path,bytes)) = &state.replace_on_detail
                         && state.detail_count == *count { fs_safe::atomic_write(path,bytes).unwrap(); }
                 }
-                let old = json!({"identifier":"group.example.old","applicationGroup":"GROUPOLD1","name":"Old"});
+                let old = json!({"identifier":"group.example.old","applicationGroup":"GROUPOLD1","name":state.old_name.as_deref().unwrap_or("Old")});
                 let new = json!({"identifier":"group.example.new","applicationGroup":"GROUPNEW1","name":"New"});
                 let detail = |associated| json!({"appIdId":"APPID123","identifier":"com.example.app","appIdPlatform":"ios","features":{"APG3427HIY":true},"enabledFeatures":["APG3427HIY"],"associatedApplicationGroupsCount":if associated {2} else {1},"associatedApplicationGroups":if associated {vec![old.clone(),new.clone()]} else {vec![old.clone()]}});
                 let body = if path.ends_with("listTeams.action") { json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}) }
@@ -447,7 +451,10 @@ impl StatefulFixture {
                     if state.created && state.readback_rejection { json!({"resultCode":35}) }
                     else { let groups = if state.created {vec![old.clone(),new.clone()]} else {vec![old.clone()]}; json!({"resultCode":0,"totalRecords":groups.len(),"applicationGroupList":groups}) }
                 } else if path.ends_with("listAppIds.action") { json!({"resultCode":0,"totalRecords":1,"appIds":[{"appIdId":"APPID123","identifier":"com.example.app","appIdPlatform":"ios"}]}) }
-                else if path.ends_with("getAppIdDetail.action") { json!({"resultCode":0,"appId":detail(state.associated)}) }
+                else if path.ends_with("getAppIdDetail.action") {
+                    if state.fail_detail_on == Some(state.detail_count) { json!({"resultCode":35}) }
+                    else { json!({"resultCode":0,"appId":detail(state.associated)}) }
+                }
                 else if path.ends_with("addApplicationGroup.action") { state.mutation_count += 1; state.created = true; json!({"resultCode":0,"applicationGroup":new}) }
                 else if path.ends_with("assignApplicationGroupToAppId.action") { state.mutation_count += 1; state.associated = true; json!({"resultCode":0,"appId":detail(true)}) }
                 else { json!({"resultCode":404}) };
@@ -668,12 +675,16 @@ async fn developer_source_change_during_final_baseline_prevents_dispatch() {
         root.path().join("session.cookie"),
         serde_json::to_vec(&source).unwrap(),
     ));
-    let result = client
-        .call("associate_app_group", &execution(&prepared, args))
+    let error = client
+        .call("associate_app_group", &execution(&prepared, args.clone()))
         .await
-        .unwrap();
-    assert_eq!(result["state"], "delivery_unknown");
+        .unwrap_err();
+    assert_eq!(error.to_string(), "developer_session_changed");
     assert_eq!(fixture.state.lock().unwrap().mutation_count, 0);
+    assert_eq!(
+        client.call("associate_app_group", &args).await.unwrap()["state"],
+        "prepared"
+    );
 }
 
 #[tokio::test]
@@ -1144,4 +1155,199 @@ async fn developer_response_secret_echo_never_enters_output_or_receipts() {
         assert!(!error.contains(reflected));
         assert!(!root.path().join("receipts.json").exists());
     }
+}
+
+#[tokio::test]
+async fn developer_existing_response_names_are_opaque_not_new_name_inputs() {
+    for name in ["Bob's Group", "Café グループ"] {
+        let fixture = StatefulFixture::start().await;
+        {
+            let mut state = fixture.state.lock().unwrap();
+            state.created = true;
+            state.old_name = Some(name.into());
+        }
+        let root = tempfile::tempdir().unwrap();
+        let client = fixture.client(root.path());
+        client
+            .publish_login("ABCDEFGHIJ", vec![seed()])
+            .await
+            .unwrap();
+        let listing = client
+            .call("list_app_groups", &json!({"team_id":"ABCDEFGHIJ"}))
+            .await
+            .unwrap();
+        assert_eq!(listing["groups"][0]["name"], name);
+        let create =
+            json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.third","name":"Third"});
+        assert_eq!(
+            client.call("create_app_group", &create).await.unwrap()["state"],
+            "prepared"
+        );
+        let associate = json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","bundle_id":"com.example.app"});
+        let prepared = client
+            .call("associate_app_group", &associate)
+            .await
+            .unwrap();
+        assert_eq!(prepared["state"], "prepared");
+        assert_eq!(
+            client
+                .call("associate_app_group", &execution(&prepared, associate))
+                .await
+                .unwrap()["state"],
+            "verified"
+        );
+        for invalid in [name, "Bad\nName"] {
+            let args =
+                json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.fourth","name":invalid});
+            assert_eq!(
+                client
+                    .call("create_app_group", &args)
+                    .await
+                    .unwrap_err()
+                    .to_string(),
+                "developer_name_invalid"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn developer_final_baseline_failure_is_not_an_uncertain_write() {
+    for change in [false, true] {
+        let fixture = StatefulFixture::start().await;
+        fixture.state.lock().unwrap().created = true;
+        let root = tempfile::tempdir().unwrap();
+        let client = fixture.client(root.path());
+        client
+            .publish_login("ABCDEFGHIJ", vec![seed()])
+            .await
+            .unwrap();
+        let args = json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","bundle_id":"com.example.app"});
+        let prepared = client.call("associate_app_group", &args).await.unwrap();
+        {
+            let mut state = fixture.state.lock().unwrap();
+            if change {
+                state.change_detail_on = Some(3);
+            } else {
+                state.fail_detail_on = Some(3);
+            }
+        }
+        assert!(
+            client
+                .call("associate_app_group", &execution(&prepared, args.clone()))
+                .await
+                .is_err()
+        );
+        assert_eq!(fixture.state.lock().unwrap().mutation_count, 0);
+        assert!(
+            client
+                .call("associate_app_group", &execution(&prepared, args.clone()))
+                .await
+                .is_err()
+        );
+        let status = client
+            .call(
+                "get_app_group_write_status",
+                &json!({"operation_id":prepared["operation_id"]}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(status["state"], "rejected");
+        assert_eq!(status["observation"], "not_dispatched");
+        let fresh = client.call("associate_app_group", &args).await.unwrap();
+        assert!(fresh["state"] == "prepared" || fresh["state"] == "no_op");
+        assert!(
+            !fs::read_to_string(root.path().join("receipts.json"))
+                .unwrap()
+                .contains("delivery_unknown")
+        );
+    }
+}
+
+#[tokio::test]
+async fn developer_not_dispatched_receipt_persistence_failure_stays_blocked() {
+    let fixture = StatefulFixture::start().await;
+    fixture.state.lock().unwrap().created = true;
+    let root = tempfile::tempdir().unwrap();
+    let client = fixture.client(root.path());
+    client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap();
+    let args = json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","bundle_id":"com.example.app"});
+    let prepared = client.call("associate_app_group", &args).await.unwrap();
+    fixture.state.lock().unwrap().fail_detail_on = Some(3);
+    client.fail_next_receipt_write();
+    assert_eq!(
+        client
+            .call("associate_app_group", &execution(&prepared, args.clone()))
+            .await
+            .unwrap_err()
+            .to_string(),
+        "developer_delivery_unknown_receipt_unverified"
+    );
+    assert_eq!(fixture.state.lock().unwrap().mutation_count, 0);
+    let restarted = fixture.client(root.path());
+    assert_eq!(
+        restarted
+            .call("associate_app_group", &args)
+            .await
+            .unwrap_err()
+            .to_string(),
+        "developer_target_delivery_unknown"
+    );
+    let stored = fs::read_to_string(root.path().join("receipts.json")).unwrap();
+    assert!(stored.contains(prepared["operation_id"].as_str().unwrap()));
+    assert!(stored.contains("delivery_unknown"));
+}
+
+#[tokio::test]
+async fn developer_actual_dispatch_gate_returns_typed_not_dispatched() {
+    let server = MockServer::start();
+    team(&server);
+    groups(&server);
+    let mutation = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/ios/identifiers/addApplicationGroup.action");
+        then.status(500);
+    });
+    let root = tempfile::tempdir().unwrap();
+    let client = portal(&server, root.path());
+    client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap();
+    let mut transaction =
+        state::Transaction::load(root.path(), &root.path().join("session.cookie")).unwrap();
+    let request = groups::write_args(
+        &json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","name":"New"}),
+        groups::Kind::Create,
+    )
+    .unwrap();
+    let (plan, _) = client
+        .resolve_plan(&mut transaction, &request.plan)
+        .await
+        .unwrap();
+    for expected in ["developer_preflight_deadline", "developer_session_changed"] {
+        let started = if expected == "developer_preflight_deadline" {
+            std::time::Instant::now() - std::time::Duration::from_secs(91)
+        } else {
+            let mut source: serde_json::Value =
+                serde_json::from_slice(&fs::read(root.path().join("session.cookie")).unwrap())
+                    .unwrap();
+            source["login_id"] = json!(uuid::Uuid::new_v4().to_string());
+            fs_safe::atomic_write(
+                &root.path().join("session.cookie"),
+                &serde_json::to_vec(&source).unwrap(),
+            )
+            .unwrap();
+            std::time::Instant::now()
+        };
+        match client.mutate(&mut transaction, &plan, started).await {
+            groups::MutationOutcome::NotDispatched(error) => {
+                assert_eq!(error.to_string(), expected)
+            }
+            _ => panic!("pre-send validation must return the typed not-dispatched outcome"),
+        }
+    }
+    mutation.assert_calls(0);
 }

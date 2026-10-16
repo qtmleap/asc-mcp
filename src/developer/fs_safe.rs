@@ -166,7 +166,7 @@ pub(crate) fn private_read(path: &Path, max: usize) -> Result<Vec<u8>> {
         libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
         0,
     )
-    .map_err(|_| anyhow::anyhow!("developer_session_required: import a valid Apple ID session"))?;
+    .map_err(|_| anyhow::anyhow!("developer_session_required: run interactive developer-login"))?;
     let meta = file
         .metadata()
         .map_err(|_| anyhow::anyhow!("developer_private_file_unreadable"))?;

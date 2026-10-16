@@ -143,6 +143,17 @@ impl DeveloperPortal {
         endpoint: Endpoint,
         fields: Vec<(String, String)>,
     ) -> Result<Value> {
+        self.request_checked(transaction, endpoint, fields, &mut false)
+            .await
+    }
+
+    async fn request_checked(
+        &self,
+        transaction: &mut state::Transaction,
+        endpoint: Endpoint,
+        fields: Vec<(String, String)>,
+        rejected: &mut bool,
+    ) -> Result<Value> {
         let path = format!("/services-account/QH65B2/{}", endpoint.path());
         let effective = Url::parse(&format!("https://developer.apple.com{path}"))
             .map_err(|_| anyhow::anyhow!("developer_endpoint_invalid"))?;
@@ -239,7 +250,10 @@ impl DeveloperPortal {
         transaction.reject_secret_echo(&body)?;
         match body["resultCode"].as_i64() {
             Some(0) => (),
-            Some(_) => bail!("developer_rejected"),
+            Some(_) => {
+                *rejected = true;
+                bail!("developer_rejected");
+            }
             None => bail!("developer_response_invalid"),
         }
         Ok(body)
@@ -455,32 +469,40 @@ impl DeveloperPortal {
             } else {
                 Some(receipts.confirmed(&write, &transaction.generation)?)
             };
-            let (plan, no_op) = self.resolve_plan(&mut transaction, &write.plan).await?;
-            transaction.persist_overlay()?;
             if let Some(index) = confirmed {
-                if plan != receipts.records[index].plan {
-                    bail!("developer_plan_changed");
-                }
-                if started.elapsed() > Duration::from_secs(90) {
-                    bail!("developer_preflight_deadline");
-                }
-                if no_op.is_some() {
-                    bail!("developer_plan_changed");
-                }
-                if transaction.csrf.is_none() {
-                    bail!("developer_csrf_required");
-                }
-                transaction.ensure_generation()?;
-                receipts.records[index].state = state::Delivery::Attempting;
-                receipts.records[index].observation = "attempting".into();
-                receipts.save(self)?;
-                let outcome = self.mutate(&mut transaction, &plan, started).await;
-                let (delivery, observation) = match outcome {
-                    Ok(()) => (state::Delivery::Verified, "verified"),
-                    Err(error) if error.to_string() == "developer_mutation_rejected" => {
-                        (state::Delivery::Rejected, "apple_rejected")
+                let preparation = async {
+                    let (plan, no_op) = self.resolve_plan(&mut transaction, &write.plan).await?;
+                    transaction.persist_overlay()?;
+                    if plan != receipts.records[index].plan || no_op.is_some() {
+                        bail!("developer_plan_changed");
                     }
-                    Err(_) => (state::Delivery::Unknown, "delivery_unknown"),
+                    self.prepare_mutation(&mut transaction, &plan, started)
+                        .await?;
+                    Ok::<_, anyhow::Error>(plan)
+                }
+                .await;
+                let outcome = match preparation {
+                    Ok(plan) => {
+                        receipts.records[index].state = state::Delivery::Attempting;
+                        receipts.records[index].observation = "attempting".into();
+                        receipts.save(self)?;
+                        self.mutate(&mut transaction, &plan, started).await
+                    }
+                    Err(error) => groups::MutationOutcome::NotDispatched(error),
+                };
+                let (delivery, observation, local_error) = match outcome {
+                    groups::MutationOutcome::Finished(Ok(())) => {
+                        (state::Delivery::Verified, "verified", None)
+                    }
+                    groups::MutationOutcome::AppleRejected => {
+                        (state::Delivery::Rejected, "apple_rejected", None)
+                    }
+                    groups::MutationOutcome::Finished(Err(_)) => {
+                        (state::Delivery::Unknown, "delivery_unknown", None)
+                    }
+                    groups::MutationOutcome::NotDispatched(error) => {
+                        (state::Delivery::Rejected, "not_dispatched", Some(error))
+                    }
                 };
                 receipts.records[index].state = delivery;
                 receipts.records[index].observation = observation.into();
@@ -497,8 +519,13 @@ impl DeveloperPortal {
                     receipts.records[index].observation = "delivery_unknown".into();
                     receipts.save(self)?;
                 }
+                if let Some(error) = local_error {
+                    return Err(error);
+                }
                 return Ok(receipts.records[index].summary());
             }
+            let (plan, no_op) = self.resolve_plan(&mut transaction, &write.plan).await?;
+            transaction.persist_overlay()?;
             if let Some(no_op) = no_op {
                 return Ok(no_op);
             }

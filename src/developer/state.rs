@@ -92,6 +92,7 @@ impl Receipt {
                     | "attempting"
                     | "verified"
                     | "apple_rejected"
+                    | "not_dispatched"
                     | "delivery_unknown"
                     | "interrupted"
                     | "desired_state_present"

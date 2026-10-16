@@ -69,7 +69,12 @@ impl Group {
         };
         identifier(&group.identifier, true)?;
         resource(&group.id)?;
-        name(&group.name)?;
+        if group.name.is_empty()
+            || group.name.len() > 1024
+            || group.name.chars().any(char::is_control)
+        {
+            bail!("developer_response_name_invalid");
+        }
         Ok(group)
     }
 }
@@ -79,6 +84,12 @@ impl Group {
 pub(super) enum Kind {
     Create,
     Associate,
+}
+
+pub(super) enum MutationOutcome {
+    NotDispatched(anyhow::Error),
+    AppleRejected,
+    Finished(Result<()>),
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -517,15 +528,54 @@ impl DeveloperPortal {
         )
     }
 
-    pub(super) async fn mutate(
+    pub(super) async fn prepare_mutation(
         &self,
         transaction: &mut Transaction,
         plan: &Plan,
         started: std::time::Instant,
     ) -> Result<()> {
-        if transaction.csrf.is_none() {
-            bail!("developer_csrf_required");
+        if plan.kind == Kind::Associate {
+            let bundle = plan
+                .bundle_id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("developer_plan_invalid"))?;
+            let app = plan
+                .app_id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("developer_plan_invalid"))?;
+            if self.associations(transaction, bundle, app).await? != plan.baseline {
+                bail!("developer_baseline_changed");
+            }
         }
+        mutation_ready(transaction, plan, started)
+    }
+
+    pub(super) async fn mutate(
+        &self,
+        transaction: &mut Transaction,
+        plan: &Plan,
+        started: std::time::Instant,
+    ) -> MutationOutcome {
+        if let Err(error) = mutation_ready(transaction, plan, started) {
+            return MutationOutcome::NotDispatched(error);
+        }
+        let mut rejected = false;
+        let result = self
+            .perform_mutation(transaction, plan, &mut rejected)
+            .await;
+        if rejected {
+            MutationOutcome::AppleRejected
+        } else {
+            MutationOutcome::Finished(result)
+        }
+    }
+
+    async fn perform_mutation(
+        &self,
+        transaction: &mut Transaction,
+        plan: &Plan,
+        rejected: &mut bool,
+    ) -> Result<()> {
         let mut fields = vec![("teamId".into(), plan.team.clone())];
         if plan.kind == Kind::Create {
             fields.push(("identifier".into(), plan.identifier.clone()));
@@ -535,11 +585,9 @@ impl DeveloperPortal {
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("developer_plan_invalid"))?,
             ));
-            mutation_ready(transaction, started)?;
             let body = self
-                .request(transaction, Endpoint::Create, fields)
-                .await
-                .map_err(mutation_error)?;
+                .request_checked(transaction, Endpoint::Create, fields, rejected)
+                .await?;
             let group = Group::parse(&body["applicationGroup"])?;
             if group.identifier != plan.identifier || Some(&group.name) != plan.name.as_ref() {
                 bail!("developer_mutation_identity_unknown");
@@ -560,10 +608,6 @@ impl DeveloperPortal {
                 .app_id
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("developer_plan_invalid"))?;
-            let baseline = self.associations(transaction, bundle, app).await?;
-            if baseline != plan.baseline {
-                bail!("developer_baseline_changed");
-            }
             fields.push(("appIdId".into(), app.clone()));
             fields.push(("displayId".into(), app.clone()));
             fields.extend(
@@ -571,11 +615,9 @@ impl DeveloperPortal {
                     .iter()
                     .map(|value| ("applicationGroups[]".into(), value.clone())),
             );
-            mutation_ready(transaction, started)?;
             let body = self
-                .request(transaction, Endpoint::Associate, fields)
-                .await
-                .map_err(mutation_error)?;
+                .request_checked(transaction, Endpoint::Associate, fields, rejected)
+                .await?;
             if !body.is_object() {
                 bail!("developer_response_invalid");
             }
@@ -621,17 +663,29 @@ impl DeveloperPortal {
     }
 }
 
-fn mutation_ready(transaction: &Transaction, started: std::time::Instant) -> Result<()> {
+fn mutation_ready(
+    transaction: &Transaction,
+    plan: &Plan,
+    started: std::time::Instant,
+) -> Result<()> {
     if started.elapsed() > std::time::Duration::from_secs(90) {
         bail!("developer_preflight_deadline");
     }
-    transaction.ensure_generation()
-}
-
-fn mutation_error(error: anyhow::Error) -> anyhow::Error {
-    if error.to_string() == "developer_rejected" {
-        anyhow::anyhow!("developer_mutation_rejected")
-    } else {
-        anyhow::anyhow!("developer_mutation_unknown")
+    transaction.ensure_generation()?;
+    if transaction.csrf.is_none() {
+        bail!("developer_csrf_required");
     }
+    let endpoint = if plan.kind == Kind::Create {
+        Endpoint::Create
+    } else {
+        Endpoint::Associate
+    };
+    super::cookies::header(
+        &transaction.cookies,
+        &url::Url::parse(&format!(
+            "https://developer.apple.com/services-account/QH65B2/{}",
+            endpoint.path()
+        ))?,
+    )?;
+    Ok(())
 }

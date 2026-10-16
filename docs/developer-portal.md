@@ -45,6 +45,10 @@ feature. Do not import reviewer cookies, symlink private files, or share this
 directory across accounts. Removing or replacing the login source invalidates
 its old refresh overlay. It does not clear unresolved write receipts.
 
+Configured storage directories must be dedicated and private: publication sets
+the source's parent directory to mode 700. Do not point the source directly into
+a shared directory or your home directory.
+
 No password, Keychain enrollment, reviewer trust store, reviewer provider pin or
 automatic renewal is created by this login path. Expired authentication requires
 another explicitly initiated interactive login. MCP tools cannot log in.
@@ -128,7 +132,19 @@ state. Concurrent reads as well as writes may return busy; retry a read later,
 but never automatically retry a mutation. Reads themselves use POST in Apple's
 protocol; endpoint semantics, not the HTTP method alone, determine a mutation.
 
+The pilot deliberately fails closed on an invalid or out-of-scope response
+cookie, rather than silently accepting a partially understood cookie update.
+Valid revocations are still persisted. An unexpected non-Secure auxiliary cookie
+can therefore make the experimental protocol unavailable; live compatibility
+must be checked before deployment, without loosening authentication isolation.
+
 ## Unknown delivery and operator recovery
+
+`rejected` with observation `not_dispatched` means local checks conclusively
+stopped the operation before a mutation request was sent; it is not an Apple
+rejection. That confirmation is consumed. Prepare a fresh dry run and obtain
+new approval before trying again. `rejected` with `apple_rejected` instead means
+the original mutation endpoint returned a typed rejection.
 
 Before its single mutation request, the tool durably records an attempt.
 Timeouts, interruption, uncertain responses, failed readback or persistence
