@@ -27,6 +27,8 @@ mod privacy;
 #[cfg(test)]
 mod privacy_collection_tests;
 #[cfg(test)]
+mod privacy_receipt_tests;
+#[cfg(test)]
 mod privacy_tests;
 #[cfg(test)]
 mod recovery_tests;
@@ -41,6 +43,17 @@ mod status;
 const MAX_BODY: usize = 8 * 1024 * 1024;
 const MAX_SESSION: usize = 1024 * 1024;
 const ORIGIN: &str = "https://appstoreconnect.apple.com";
+
+#[derive(Clone, Copy)]
+enum ResponsePolicy {
+    StrictJson,
+    PrivacyUsageCreate201,
+}
+
+struct FetchPolicy<'a> {
+    pin: Option<&'a str>,
+    response: ResponsePolicy,
+}
 
 pub struct Reviewer {
     client: Client,
@@ -852,12 +865,70 @@ impl Reviewer {
         iris: bool,
         pin: Option<&str>,
     ) -> Result<Raw> {
+        self.fetch_with_policy(
+            method,
+            url,
+            payload,
+            csrf,
+            iris,
+            FetchPolicy {
+                pin,
+                response: ResponsePolicy::StrictJson,
+            },
+        )
+        .await
+    }
+
+    async fn pinned_privacy_create(
+        &self,
+        pin: &Pinned,
+        payload: Value,
+    ) -> Result<(Value, HeaderMap)> {
+        let raw = self
+            .fetch_with_policy(
+                Method::POST,
+                self.origin.join("/iris/v1/appDataUsages")?,
+                Some(payload),
+                None,
+                true,
+                FetchPolicy {
+                    pin: Some(&pin.generation),
+                    response: ResponsePolicy::PrivacyUsageCreate201,
+                },
+            )
+            .await?;
+        pin.remember(&raw.cookies);
+        Ok((raw.data, raw.headers))
+    }
+
+    async fn fetch_with_policy(
+        &self,
+        method: Method,
+        url: Url,
+        payload: Option<Value>,
+        csrf: Option<&HeaderMap>,
+        iris: bool,
+        policy: FetchPolicy<'_>,
+    ) -> Result<Raw> {
+        let FetchPolicy {
+            pin,
+            response: policy,
+        } = policy;
         if url.origin() != self.origin.origin()
             || !url.username().is_empty()
             || url.password().is_some()
         {
             bail!("reviewer_untrusted_origin");
         }
+        // Only this pinned collection-create operation can use a completed 201
+        // receipt without JSON. Its caller must still prove the exact GET delta.
+        let privacy_create_receipt = matches!(policy, ResponsePolicy::PrivacyUsageCreate201)
+            && pin.is_some()
+            && iris
+            && method == Method::POST
+            && url.path() == "/iris/v1/appDataUsages"
+            && url.query().is_none()
+            && url.fragment().is_none();
         let snapshot = session::load(self.cookie_path.clone(), self.root.clone()).await?;
         // Fails before sending: a replaced source must never continue a pinned operation.
         if pin.is_some_and(|generation| generation != snapshot.generation) {
@@ -1004,7 +1075,15 @@ impl Reviewer {
                 cookies: redaction_cookies,
             });
         }
-        let data = serde_json::from_slice(&bytes).map_err(|_| {
+        let parsed = serde_json::from_slice(&bytes);
+        if parsed.is_err() && privacy_create_receipt && status.as_u16() == 201 {
+            return Ok(Raw {
+                data: json!({"data":null}),
+                headers,
+                cookies: redaction_cookies,
+            });
+        }
+        let data = parsed.map_err(|_| {
             anyhow::anyhow!(if write {
                 format!(
                     "delivery_unknown: invalid JSON response; HTTP {}",

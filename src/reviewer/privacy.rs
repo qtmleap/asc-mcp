@@ -287,6 +287,17 @@ struct UsageRow {
     protection: String,
 }
 impl UsageRow {
+    // Historical Iris questionnaires store tracking once per category, without
+    // a purpose relationship. This is observed source state, never a new row.
+    fn legacy_category_tracking(&self) -> bool {
+        self.protection == "DATA_USED_TO_TRACK_YOU"
+            && self.purpose.is_none()
+            && self
+                .category
+                .as_deref()
+                .is_some_and(|category| CATEGORIES.contains(&category))
+    }
+
     fn tuple(&self) -> Result<UsageTuple> {
         let category = self
             .category
@@ -433,7 +444,7 @@ fn collection_tools() -> Vec<Value> {
         .as_array_mut()
         .unwrap()
         .push(json!("expected_intent_fingerprint"));
-    result.push(json!({"name":"acknowledge_app_privacy_partial","description":"Acknowledge only a conclusively observed applied prefix of an original collection batch. Requires exact original-intent and fresh snapshot digests, unchanged authentication source, original matrix and exclusive editing. Archives original bytes before saving a partial checkpoint. Sends only GET requests to Apple; never retries, rolls back, deletes disclosures, publishes or claims the whole matrix complete. Supports original NoData, same-desired normalized subset, or an exact checkpoint proven by a bounded archive chain; no obsolete collection deletions.","inputSchema":schema,"annotations":{"readOnlyHint":false,"destructiveHint":false,"openWorldHint":true}}));
+    result.push(json!({"name":"acknowledge_app_privacy_partial","description":"Acknowledge only a conclusively observed applied prefix of an original collection batch. Requires exact original-intent and fresh snapshot digests, unchanged authentication source, original matrix and exclusive editing. Archives original bytes before saving a partial checkpoint. Sends only GET requests to Apple; never retries, rolls back, deletes disclosures, publishes or claims the whole matrix complete. Supports original NoData, a same-desired normalized subset, or a replacement already past every obsolete DELETE and through an exactly observed POST prefix. Every obsolete resource ID must be absent; uncertainty at or before the last obsolete collection DELETE is refused. An exact checkpoint is proven by a bounded archive chain; continuation only POSTs the missing suffix.","inputSchema":schema,"annotations":{"readOnlyHint":false,"destructiveHint":false,"openWorldHint":true}}));
     let mut schema = result[1]["inputSchema"].clone();
     schema["properties"]["confirmation"] =
         json!({"type":"string","enum":["ACKNOWLEDGE_CURRENT_PUBLISHED_APP_PRIVACY_GOAL"]});
@@ -593,6 +604,59 @@ impl Snapshot {
         }
         Ok(result)
     }
+
+    // Replacement alone can remove recognized legacy markers by their exact
+    // preflight IDs. Desired rows, publication and reconciliation remain strict.
+    fn replacement_tuples(&self) -> Result<(Vec<UsageTuple>, Vec<UsageRow>)> {
+        Self::replacement_tuples_for(&self.rows)
+    }
+
+    fn replacement_tuples_for(rows: &[UsageRow]) -> Result<(Vec<UsageTuple>, Vec<UsageRow>)> {
+        let mut ids = HashSet::new();
+        let mut legacy_categories = HashSet::new();
+        let mut modern = Vec::new();
+        let mut legacy = Vec::new();
+        for row in rows {
+            if !ids.insert(&row.id) {
+                bail!("reviewer_privacy_collection_schema_invalid");
+            }
+            if row.legacy_category_tracking() {
+                if !legacy_categories.insert(row.category.as_deref().unwrap()) {
+                    bail!("reviewer_privacy_collection_schema_invalid");
+                }
+                legacy.push(row.clone());
+            } else {
+                modern.push(row.tuple()?);
+            }
+        }
+        modern.sort();
+        if modern.windows(2).any(|w| w[0] == w[1]) {
+            bail!("reviewer_privacy_collection_schema_invalid");
+        }
+        if !legacy.is_empty() {
+            // A category marker cannot excuse an incomplete or contradictory
+            // collection shape. Purposeful tracking in that category is a
+            // different representation and must not be silently combined.
+            disclosures_from_tuples(&modern)?;
+            for marker in &legacy {
+                let category = marker.category.as_deref().unwrap();
+                if !modern.iter().any(|t| t.category == category)
+                    || modern
+                        .iter()
+                        .any(|t| t.category == category && t.protection == "DATA_USED_TO_TRACK_YOU")
+                    || rows.iter().any(|row| {
+                        row.category.as_deref() == Some(category)
+                            && !row.legacy_category_tracking()
+                            && row.grouping != marker.grouping
+                    })
+                {
+                    bail!("reviewer_privacy_collection_schema_invalid");
+                }
+            }
+        }
+        Ok((modern, legacy))
+    }
+
     fn disclosures(&self) -> Result<Vec<Disclosure>> {
         if self.safe_no_data() || self.rows.is_empty() {
             return Ok(vec![]);
@@ -803,19 +867,20 @@ impl Reviewer {
         let mut original_tuples = if no_data {
             vec![]
         } else {
-            initial
-                .iter()
-                .map(UsageRow::tuple)
-                .collect::<Result<Vec<_>>>()?
+            Snapshot::replacement_tuples_for(&initial)?.0
         };
         original_tuples.sort();
-        if original_tuples.windows(2).any(|w| w[0] == w[1])
-            || original_tuples.iter().any(|t| !desired.contains(t))
-        {
-            bail!("reviewer_privacy_recovery_not_supported");
-        }
+        // Reconstruct the original replacement plan. An attempted POST proves
+        // every earlier exact-ID DELETE passed its readback before advancing.
+        let obsolete: HashSet<_> = initial
+            .iter()
+            .filter(|row| !row.tuple().is_ok_and(|t| desired.contains(&t)))
+            .map(|row| row.id.clone())
+            .collect();
+        let replacement_post_phase = !no_data && !obsolete.is_empty();
         if let Some(checkpoint) = &intent.recovery_snapshot_digest {
-            if checkpoint != &initial_digest || ancestors.len() >= 32 {
+            // A resumed initial snapshot is only an additive desired prefix.
+            if replacement_post_phase || checkpoint != &initial_digest || ancestors.len() >= 32 {
                 bail!("reviewer_privacy_recovery_provenance_invalid");
             }
             let (fingerprint, ancestor) = self.privacy_partial_archive(intent)?;
@@ -833,15 +898,19 @@ impl Reviewer {
             .filter(|t| !original_tuples.contains(t))
             .cloned()
             .collect();
-        let deletes = usize::from(no_data);
+        let deletes = obsolete.len();
         if intent.total_steps != deletes + missing.len()
             || intent.step == 0
             || intent.step >= intent.total_steps
             || intent.step < deletes
+            || replacement_post_phase && intent.step <= deletes
         {
             bail!("reviewer_privacy_recovery_not_partial");
         }
-        let mut retained = if no_data { vec![] } else { initial };
+        let mut retained: Vec<_> = initial
+            .into_iter()
+            .filter(|row| !obsolete.contains(&row.id))
+            .collect();
         let mut observed_retained = Vec::new();
         let mut observed_added = Vec::new();
         let mut seen_ids = HashSet::new();
@@ -850,6 +919,7 @@ impl Reviewer {
                 || row.id.len() > 128
                 || !pin.public(&row.id)
                 || !seen_ids.insert(&row.id)
+                || obsolete.contains(&row.id)
             {
                 bail!("reviewer_privacy_recovery_prefix_mismatch");
             }
@@ -1019,10 +1089,12 @@ impl Reviewer {
                 "reviewer_privacy_snapshot_mismatch: read the entire current questionnaire before replacing or publishing it"
             );
         }
-        let actual = if snapshot.safe_no_data() {
-            vec![]
+        let (actual, legacy) = if snapshot.safe_no_data() {
+            (vec![], vec![])
+        } else if publish {
+            (snapshot.tuples()?, vec![])
         } else {
-            snapshot.tuples()?
+            snapshot.replacement_tuples()?
         };
         let mut authenticated_partial = false;
         if let Some(i) = prior.as_ref().filter(|i| i.state == "partial_confirmed") {
@@ -1055,7 +1127,7 @@ impl Reviewer {
         // A valid partial prefix may split tracking rows across purposes. Only
         // its exact durable checkpoint and archived prefix authorize continuation.
         if !authenticated_partial && !snapshot.safe_no_data() && !snapshot.rows.is_empty() {
-            snapshot.disclosures()?;
+            disclosures_from_tuples(&actual)?;
         }
         if publish && actual != desired {
             bail!("reviewer_privacy_disclosures_mismatch");
@@ -1074,7 +1146,7 @@ impl Reviewer {
                         == Some(PublicationBasis::CurrentPublishedGoalAcknowledged)
                         && publication_goal_matches(&snapshot, i))
         });
-        if !publish && actual == desired || publish && proven_publish {
+        if !publish && actual == desired && legacy.is_empty() || publish && proven_publish {
             return Ok(
                 json!({"app_id":app,"status":if publish {"published"} else {"draft_verified"},"already_present":true,"disclosures":snapshot.disclosures()?,"snapshot_digest":snapshot.fingerprint(&app),"published":snapshot.published,"current_published":snapshot.published,"request_accepted":prior.as_ref().and_then(|i|i.publication_acceptance.as_ref()).map(|_|true),"fresh_publication_verified":publish && prior.as_ref().is_some_and(|i|i.publication_basis != Some(PublicationBasis::CurrentPublishedGoalAcknowledged) && i.publication_before.as_ref().is_some_and(|before|snapshot.publication.proves_new_publication(before)))}),
             );
@@ -1178,9 +1250,16 @@ impl Reviewer {
             }
             self.check_pin(&pin).await?;
             self.privacy_save(&intent)?;
-            let response = self
-                .pinned(&pin, method, self.url(&path, &[])?, payload, true)
-                .await;
+            let response = if method == Method::POST && path == "/iris/v1/appDataUsages" {
+                self.pinned_privacy_create(
+                    &pin,
+                    payload.context("reviewer_privacy_arguments_invalid")?,
+                )
+                .await
+            } else {
+                self.pinned(&pin, method, self.url(&path, &[])?, payload, true)
+                    .await
+            };
             let response = if publish {
                 response.and_then(|(body, headers)| {
                     publication_acceptance(&body, &headers, &app, &intent.publish_state_id)

@@ -172,10 +172,15 @@ The `disclosures` array must be the complete original matrix accepted by the set
 tool. Recovery requires the same authentication source and original
 matrix, the original publication resource, both exact digests, and an observed
 completed prefix at the recorded attempted step. An absent uncertain POST is
-never acknowledged. Original states are limited to a single No Data record or
-a normalized subset of the same intended matrix, with no obsolete collection
-rows to delete. Retained row IDs and attributes must be unchanged; added tuples
-and their resource IDs must be unique and exactly match the applied prefix.
+never acknowledged. Original states may be a single No Data record, a
+normalized subset of the same intended matrix, or a validated replacement that
+has already passed every obsolete DELETE and attempted a POST. In that replacement
+case the attempted step must be strictly after the obsolete DELETE count and
+before the final step, every obsolete resource ID must remain absent, and the
+exact attempted POST prefix must already exist. An uncertain obsolete collection
+DELETE remains refused, including the last DELETE. Retained row IDs and attributes
+must be unchanged; added tuples and their resource IDs must be unique and exactly
+match the applied prefix. Continuation only POSTs the missing suffix.
 
 Before changing local state, the MCP preserves the original raw intent bytes in
 a private archive and verifies them. Archive conflict or failure keeps the
