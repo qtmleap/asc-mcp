@@ -88,7 +88,7 @@ from this Mac use `http://127.0.0.1:8878/mcp`.
 
 The Apple ID session below means an authenticated **App Store Connect web
 session**, not this chat or an official API-key JWT. The current server exposes
-twenty-one session-backed tools with a session alone (five status tools, five conversation/monitor tools, four reply/recovery tools and seven App Privacy tools). It adds 366 public API tools (356 legacy and ten native additions) when
+twenty-one session-backed tools with a session alone (five status tools, five conversation/monitor tools, four reply/recovery tools and seven App Privacy tools). It adds 367 public API tools (356 legacy and eleven native additions) when
 team API credentials are configured; actual access depends on Apple's role
 permissions. Having a key does not grant every tool permission.
 
@@ -191,7 +191,7 @@ versions, review submission, screenshots/previews, TestFlight, provisioning,
 commerce, Game Center, reporting, analytics, Xcode Cloud, webhooks and assets.
 The complete runtime catalogue is available with `asc-mcp tools`.
 
-Ten additions bring the public catalogue to **366 tools**:
+Eleven additions bring the public catalogue to **367 tools**:
 
 - `get_app_store_version_build` reads the related selected build.
 - `set_app_store_version_build` selects a processed, eligible build by resource ID. A successful 204 response returns `{"status":"success"}`; read back the selection before retrying an uncertain write.
@@ -200,7 +200,8 @@ Ten additions bring the public catalogue to **366 tools**:
 - `get_app_info` reads one app info with optional `include` and `fields` (for example `primaryCategory`, `ageRatingDeclaration`).
 - `update_app_info_categories` sets `primary_category_id` and optionally `secondary_category_id` (IDs from `list_app_categories`).
 - `list_app_price_schedule_prices` lists `MANUAL` or `AUTOMATIC` prices of a schedule (`include=appPricePoint,territory`) to read back actual customer prices, such as a zero price.
-- `add_builds_to_beta_group` additively links existing builds (`build_ids`, nonempty) to a TestFlight beta group via POST, preserving existing membership. A 204 returns `{"status":"success"}`; read back with `list_beta_groups` (include builds) or `list_builds` filtered by `betaGroups` before retrying an uncertain write.
+- `add_builds_to_beta_group` additively links existing builds (`build_ids`, nonempty) to a TestFlight beta group via POST, preserving existing membership. A 204 returns `{"status":"success"}`; read back with `list_beta_groups` (include builds) or `list_builds` filtered by `betaGroups` before retrying an uncertain write. Embedded `include=builds` is partial when the paging total exceeds the returned count; use a focused `list_builds` `betaGroups` filter for negative checks.
+- `create_beta_build_notification` (`build_id`) POSTs `/v1/buildBetaNotifications` and notifies all assigned, eligible TestFlight testers; it does not guarantee delivery or a testing state. It is non-idempotent and never retried automatically. Only a 201 with a `buildBetaNotifications` resource is success; a malformed or unexpected 2xx, timeout or transport failure is reported as an uncertain outcome (reconcile with `get_build`/`list_builds` before retrying), while Apple 409/422/429/5xx errors keep their bounded structured details.
 
 Repairs to existing tools: `set_app_price_schedule` now sends Apple `${price-N}` inline IDs and requires a non-empty `prices` array (a free app uses the zero-price point; an empty array is rejected).
 `list_app_store_review_attachments` takes `review_detail_id`; the legacy `version_id` remains an alias of that review-detail ID (not a version ID) and conflicting values are rejected.

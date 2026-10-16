@@ -313,7 +313,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(value["result"]["tools"].as_array().unwrap().len(), 366);
+        assert_eq!(value["result"]["tools"].as_array().unwrap().len(), 367);
         assert!(
             s.dispatch(
                 &json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
