@@ -1,6 +1,8 @@
 use anyhow::{Result, bail};
 use asc_mcp::{
-    catalog, http,
+    catalog,
+    developer::DeveloperPortal,
+    http,
     protocol::{Server, Session},
     reviewer::{self, Reviewer},
 };
@@ -46,6 +48,12 @@ enum Command {
         source: PathBuf,
     },
     ReviewerRenew,
+    DeveloperLogin {
+        #[arg(long)]
+        apple_id: String,
+        #[arg(long)]
+        team_id: String,
+    },
     ReviewerLogin {
         #[arg(long)]
         apple_id: Option<String>,
@@ -95,17 +103,31 @@ async fn run() -> Result<()> {
             }
         }
         Command::Tools => {
-            let mut tools = catalog::tools();
-            if let Some(r) = Reviewer::from_env()? {
-                tools.extend(r.tools())
+            let developer = DeveloperPortal::from_env()?;
+            let api = if developer.is_some() {
+                asc_mcp::client::ApiClient::from_env()?
+            } else {
+                None
             };
+            let reviewer = Reviewer::from_env()?;
+            let mut tools = if developer.is_some() && api.is_none() {
+                vec![]
+            } else {
+                catalog::tools()
+            };
+            if let Some(reviewer) = reviewer {
+                tools.extend(reviewer.tools());
+            }
+            if let Some(developer) = developer {
+                tools.extend(developer.tools());
+            }
             println!("{}", serde_json::to_string_pretty(&tools)?);
             Ok(())
         }
         Command::Validate => {
             let s = Server::from_env()?;
-            if s.api.is_none() && s.reviewer.is_none() {
-                bail!("configure public API credentials or reviewer session")
+            if s.api.is_none() && s.reviewer.is_none() && s.developer.is_none() {
+                bail!("configure public API credentials, reviewer session or Developer tools")
             };
             println!("configuration valid (live authentication not tested)");
             Ok(())
@@ -139,6 +161,11 @@ async fn run() -> Result<()> {
         }
         Command::ReviewerRenew => {
             println!("{}", asc_mcp::renewal::run_once().await?);
+            Ok(())
+        }
+        Command::DeveloperLogin { apple_id, team_id } => {
+            let path = asc_mcp::apple_login::developer_login(&apple_id, &team_id).await?;
+            println!("Developer session saved privately to {}", path.display());
             Ok(())
         }
         Command::ReviewerLogin {

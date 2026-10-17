@@ -1,5 +1,7 @@
 //! MCP dispatch shared by stdio and Streamable HTTP transports.
-use crate::{api_tools, catalog, client::ApiClient, reviewer::Reviewer, uploads};
+use crate::{
+    api_tools, catalog, client::ApiClient, developer::DeveloperPortal, reviewer::Reviewer, uploads,
+};
 use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +23,7 @@ pub struct Session {
 pub struct Server {
     pub api: Option<ApiClient>,
     pub reviewer: Option<Reviewer>,
+    pub developer: Option<DeveloperPortal>,
 }
 fn server_info() -> Value {
     json!({"name":"asc-mcp","title":"App Store Connect MCP (Rust)","version":env!("CARGO_PKG_VERSION")})
@@ -41,21 +44,27 @@ fn modern_stamp(value: &mut Value, cache: bool) {
 }
 impl Server {
     pub fn from_env() -> Result<Self> {
+        let developer = DeveloperPortal::from_env()?;
         Ok(Self {
             api: ApiClient::from_env()?,
             reviewer: Reviewer::from_env()?,
+            developer,
         })
     }
     pub fn tools(&self) -> Vec<Value> {
         // Tool listing does not require credentials. Reviewer-only startup avoids
         // exposing official handlers whose client isn't configured.
-        let mut tools = if self.api.is_some() || self.reviewer.is_none() {
-            catalog::tools()
-        } else {
-            Vec::new()
-        };
+        let mut tools =
+            if self.api.is_some() || (self.reviewer.is_none() && self.developer.is_none()) {
+                catalog::tools()
+            } else {
+                Vec::new()
+            };
         if let Some(reviewer) = &self.reviewer {
             tools.extend(reviewer.tools())
+        }
+        if let Some(developer) = &self.developer {
+            tools.extend(developer.tools());
         }
         tools
     }
@@ -79,6 +88,14 @@ impl Server {
             return reviewer
                 .call_with_api(name, args, Some(self.api.is_some()))
                 .await;
+        }
+        if let Some(developer) = &self.developer
+            && developer
+                .tools()
+                .iter()
+                .any(|tool| tool["name"].as_str() == Some(name))
+        {
+            return developer.call(name, args).await;
         }
         let client = self
             .api
@@ -267,6 +284,53 @@ mod tests {
         Server {
             api: None,
             reviewer: None,
+            developer: None,
+        }
+    }
+    #[tokio::test]
+    async fn developer_only_protocol_catalogue_and_dispatch() {
+        let mock = httpmock::MockServer::start();
+        let root = tempfile::tempdir().unwrap();
+        let server = Server {
+            api: None,
+            reviewer: None,
+            developer: Some(
+                DeveloperPortal::for_test(
+                    &mock.base_url(),
+                    root.path(),
+                    &root.path().join("session.cookie"),
+                )
+                .unwrap(),
+            ),
+        };
+        assert_eq!(server.tools().len(), 6);
+        for version in VERSIONS {
+            let session = Session::default();
+            session.initialized.store(true, Ordering::Release);
+            let mut params = json!({"name":"get_developer_connection_status","arguments":{}});
+            if *version == MODERN {
+                params["_meta"] = json!({META_VERSION:MODERN,META_CAPABILITIES:{}});
+            }
+            let response = server
+                .dispatch(
+                    &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":params}),
+                    &session,
+                )
+                .await
+                .unwrap();
+            assert_eq!(response["result"]["isError"], false);
+            assert_eq!(
+                response["result"]["structuredContent"]["status"],
+                "authentication_required"
+            );
+            assert_eq!(
+                server
+                    .call("list_apps", &json!({}))
+                    .await
+                    .unwrap_err()
+                    .to_string(),
+                "unknown tool"
+            );
         }
     }
     #[tokio::test]
@@ -358,6 +422,7 @@ mod tests {
         let server = Server {
             api: Some(ApiClient::with_endpoint(&mock.base_url()).unwrap()),
             reviewer: None,
+            developer: None,
         };
         assert_eq!(
             server
@@ -388,6 +453,7 @@ mod tests {
         let server = Server {
             api: Some(ApiClient::with_endpoint(&mock.base_url()).unwrap()),
             reviewer: None,
+            developer: None,
         };
         let session = Session::default();
         session.initialized.store(true, Ordering::Release);
@@ -430,6 +496,7 @@ mod review_status_tests {
         let server = Server {
             api: None,
             reviewer: Some(Reviewer::for_test(&mock.base_url(), dir.path())),
+            developer: None,
         };
         let response = server
             .dispatch(
@@ -451,6 +518,7 @@ mod review_status_tests {
         let server = Server {
             api: None,
             reviewer: None,
+            developer: None,
         };
         let response = server
             .dispatch(&call_request("list_review_apps", json!({})), &ready())
@@ -471,6 +539,7 @@ mod review_status_tests {
             let server = Server {
                 api: configured.then(|| ApiClient::with_endpoint(&mock.base_url()).unwrap()),
                 reviewer: Some(Reviewer::for_test(&mock.base_url(), dir.path())),
+                developer: None,
             };
             let response = server
                 .dispatch(
@@ -498,6 +567,7 @@ mod review_status_tests {
         let server = Server {
             api: None,
             reviewer: Some(Reviewer::for_test(&mock.base_url(), dir.path())),
+            developer: None,
         };
         for (name, args) in [
             ("get_app_review_status", json!({"app_id":"abc"})),
@@ -529,6 +599,7 @@ mod review_status_tests {
         let server = Server {
             api: None,
             reviewer: Some(Reviewer::for_test(&mock.base_url(), dir.path())),
+            developer: None,
         };
         let response = server
             .dispatch(

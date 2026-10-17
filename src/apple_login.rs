@@ -454,6 +454,31 @@ impl AuthClient {
             })
             .collect()
     }
+    fn developer_seed(&self) -> Result<Vec<crate::developer::PortalCookie>> {
+        let cookies: Vec<crate::developer::PortalCookie> = self
+            .cookies
+            .iter()
+            .filter(|(key, _)| !self.seeded.contains(*key))
+            .filter_map(|(_, value)| {
+                serde_json::from_value::<crate::developer::PortalCookie>(value.clone()).ok()
+            })
+            .filter(|cookie| {
+                cookie.valid()
+                    && cookie.unexpired()
+                    && !cookie.host_only
+                    && cookie.domain == "apple.com"
+            })
+            .collect();
+        ensure!(
+            cookies
+                .iter()
+                .filter(|cookie| cookie.name == "myacinfo")
+                .count()
+                == 1,
+            "developer_login_seed_unavailable"
+        );
+        Ok(cookies)
+    }
     async fn widget_key(&mut self) -> Result<()> {
         // A fresh, empty cookie jar: HEAD /logout discovers the public widget key without logging anyone out.
         let response = self
@@ -843,6 +868,46 @@ pub async fn login(email: &str) -> Result<PathBuf> {
     login_with_options(email, false).await
 }
 
+pub async fn developer_login(email: &str, team_id: &str) -> Result<PathBuf> {
+    let email = credentials::normalize_account(email)
+        .map_err(|_| anyhow::anyhow!("developer_login_account_invalid"))?;
+    crate::developer::validate_team(team_id)?;
+    ensure!(cfg!(unix), "developer_platform_unsupported");
+    ensure!(
+        io::stdin().is_terminal() && io::stderr().is_terminal(),
+        "developer_login_interactive_terminal_required"
+    );
+    let portal = crate::developer::DeveloperPortal::new_default()?;
+    let password = read_secret("Apple ID password: ")?;
+    ensure!(!password.is_empty(), "developer_login_password_required");
+    let mut discovery = AuthClient::new()?;
+    discovery.widget_key().await?;
+    let widget = std::mem::take(&mut discovery.widget);
+    drop(discovery);
+    let mut auth = AuthClient::with_trust(widget, vec![])?;
+    let session =
+        authenticate_with_password(&mut auth, &email, &password, ChallengePolicy::Interactive)
+            .await?;
+    developer_finish(&auth, &session, &email, team_id, &portal).await
+}
+
+async fn developer_finish(
+    auth: &AuthClient,
+    session: &Reply,
+    email: &str,
+    team_id: &str,
+    portal: &crate::developer::DeveloperPortal,
+) -> Result<PathBuf> {
+    session
+        .success()
+        .map_err(|_| anyhow::anyhow!("developer_login_authentication_failed"))?;
+    ensure!(
+        identity_matches(&session.json()?, email),
+        "developer_login_identity_mismatch"
+    );
+    portal.publish_login(team_id, auth.developer_seed()?).await
+}
+
 pub async fn login_with_options(email: &str, fresh: bool) -> Result<PathBuf> {
     login_with_provider_override(email, fresh, false).await
 }
@@ -1077,6 +1142,145 @@ async fn authenticate_with_password(
 mod tests {
     use super::*;
     use std::fs;
+    fn developer_auth() -> AuthClient {
+        let mut auth = AuthClient::with_trust("synthetic-widget".into(), vec![]).unwrap();
+        auth.record_cookie(
+            "myacinfo=synthetic-developer; Domain=apple.com; Path=/; Secure",
+            &Url::parse(AUTH).unwrap(),
+        );
+        auth
+    }
+
+    #[cfg(unix)]
+    fn developer_session(email: &str) -> Reply {
+        Reply {
+            status: StatusCode::OK,
+            headers: HeaderMap::new(),
+            body: serde_json::to_vec(&json!({"user":{"emailAddress":email}})).unwrap(),
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn developer_login_does_not_finalize_reviewer() {
+        let server = httpmock::MockServer::start();
+        server.mock(|when, then| {
+            when.method("POST")
+                .path("/services-account/QH65B2/account/listTeams.action");
+            then.header("content-type", "application/json")
+                .json_body(json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}));
+        });
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("developer.cookie");
+        let untouched = root.path().join("reviewer.cookie");
+        fs::write(&untouched, b"unchanged").unwrap();
+        let portal =
+            crate::developer::DeveloperPortal::for_test(&server.base_url(), root.path(), &source)
+                .unwrap();
+        developer_finish(
+            &developer_auth(),
+            &developer_session("synthetic@example.com"),
+            "synthetic@example.com",
+            "ABCDEFGHIJ",
+            &portal,
+        )
+        .await
+        .unwrap();
+        assert_eq!(fs::read(&untouched).unwrap(), b"unchanged");
+        let published = fs::read_to_string(&source).unwrap();
+        assert!(!published.contains("synthetic@example.com"));
+        assert!(!root.path().join("identity.json").exists());
+        assert!(!root.path().join("login-trust.json").exists());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn developer_login_rejects_wrong_identity_and_team() {
+        let server = httpmock::MockServer::start();
+        let reads = server.mock(|when, then| {
+            when.method("POST");
+            then.header("content-type", "application/json")
+                .json_body(json!({"resultCode":0,"teams":[{"teamId":"ZZZZZZZZZZ"}]}));
+        });
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("developer.cookie");
+        let portal =
+            crate::developer::DeveloperPortal::for_test(&server.base_url(), root.path(), &source)
+                .unwrap();
+        assert!(
+            developer_finish(
+                &developer_auth(),
+                &developer_session("wrong@example.com"),
+                "synthetic@example.com",
+                "ABCDEFGHIJ",
+                &portal
+            )
+            .await
+            .is_err()
+        );
+        reads.assert_calls(0);
+        assert!(
+            developer_finish(
+                &developer_auth(),
+                &developer_session("synthetic@example.com"),
+                "synthetic@example.com",
+                "ABCDEFGHIJ",
+                &portal
+            )
+            .await
+            .is_err()
+        );
+        reads.assert_calls(1);
+        assert!(!source.exists());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn developer_login_never_publishes_before_portal_bootstrap() {
+        let server = httpmock::MockServer::start();
+        let reads = server.mock(|when, then| {
+            when.method("POST");
+            then.status(500);
+        });
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("developer.cookie");
+        fs::write(&source, b"previous").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&source, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let portal =
+            crate::developer::DeveloperPortal::for_test(&server.base_url(), root.path(), &source)
+                .unwrap();
+        assert!(
+            developer_finish(
+                &developer_auth(),
+                &developer_session("synthetic@example.com"),
+                "synthetic@example.com",
+                "ABCDEFGHIJ",
+                &portal
+            )
+            .await
+            .is_err()
+        );
+        reads.assert_calls(1);
+        assert_eq!(fs::read(&source).unwrap(), b"previous");
+    }
+
+    #[test]
+    fn developer_seed_requires_fresh_secure_parent_domain_cookie() {
+        assert!(developer_auth().developer_seed().is_ok());
+        for raw in [
+            "myacinfo=host; Path=/; Secure",
+            "myacinfo=expired; Domain=apple.com; Path=/; Secure; Max-Age=0",
+            "myacinfo=insecure; Domain=apple.com; Path=/",
+        ] {
+            let mut auth = AuthClient::with_trust("synthetic-widget".into(), vec![]).unwrap();
+            auth.record_cookie(raw, &Url::parse(AUTH).unwrap());
+            assert!(auth.developer_seed().is_err());
+        }
+    }
     fn finalize_fixture(
         auth: &AuthClient,
         session: &Reply,
