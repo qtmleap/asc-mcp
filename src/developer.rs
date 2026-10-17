@@ -23,6 +23,7 @@ mod fs_safe {
     }
 }
 mod groups;
+mod shared;
 mod state;
 pub(crate) use cookies::PortalCookie;
 
@@ -157,11 +158,11 @@ impl DeveloperPortal {
         let path = format!("/services-account/QH65B2/{}", endpoint.path());
         let effective = Url::parse(&format!("https://developer.apple.com{path}"))
             .map_err(|_| anyhow::anyhow!("developer_endpoint_invalid"))?;
-        let mut cookie = reqwest::header::HeaderValue::from_str(&cookies::header(
-            &transaction.cookies,
-            &effective,
-        )?)
-        .map_err(|_| anyhow::anyhow!("developer_cookie_invalid"))?;
+        if !transaction.generation.is_empty() {
+            transaction.ensure_generation()?;
+        }
+        let mut cookie = reqwest::header::HeaderValue::from_str(&transaction.header(&effective)?)
+            .map_err(|_| anyhow::anyhow!("developer_cookie_invalid"))?;
         cookie.set_sensitive(true);
         let url = self
             .endpoint
@@ -181,19 +182,7 @@ impl DeveloperPortal {
             .await
             .map_err(|_| anyhow::anyhow!("developer_transport_failed"))?;
         let headers = response.headers().clone();
-        let previous = transaction.cookies.clone();
-        let rotation = cookies::rotate(&mut transaction.cookies, &headers, &effective);
-        if transaction.cookies != previous && !transaction.generation.is_empty() {
-            transaction.persist_overlay()?;
-        }
-        rotation?;
-        transaction.remember_secrets(
-            previous
-                .iter()
-                .chain(&transaction.cookies)
-                .map(|cookie| cookie.value.clone())
-                .collect::<Vec<_>>(),
-        )?;
+        transaction.rotate_response(&headers, &effective)?;
         transaction.remember_secrets(
             ["csrf", "csrf_ts"]
                 .into_iter()
@@ -261,9 +250,23 @@ impl DeveloperPortal {
 
     async fn verify_team(&self, transaction: &mut state::Transaction, team: &str) -> Result<()> {
         validate_team(team)?;
-        if transaction.source.team_id != team {
+        if let state::Authentication::Dedicated(source) = &transaction.auth
+            && source.team_id != team
+        {
             bail!("developer_team_mismatch");
         }
+        let identities = self.teams(transaction).await?;
+        if !identities.contains(team) {
+            bail!("developer_team_unavailable");
+        }
+        transaction.team_id = Some(team.into());
+        Ok(())
+    }
+
+    async fn teams(
+        &self,
+        transaction: &mut state::Transaction,
+    ) -> Result<std::collections::BTreeSet<String>> {
         let body = self.request(transaction, Endpoint::Teams, vec![]).await?;
         let teams = body["teams"]
             .as_array()
@@ -275,14 +278,11 @@ impl DeveloperPortal {
                 .as_str()
                 .ok_or_else(|| anyhow::anyhow!("developer_teams_invalid"))?;
             validate_team(identity)?;
-            if !identities.insert(identity) {
+            if !identities.insert(identity.to_owned()) {
                 bail!("developer_teams_invalid");
             }
         }
-        if !identities.contains(team) {
-            bail!("developer_team_unavailable");
-        }
-        Ok(())
+        Ok(identities)
     }
 
     pub(crate) async fn publish_login(
@@ -304,7 +304,8 @@ impl DeveloperPortal {
             _lock: lock,
             root: self.root.clone(),
             source_path: self.source.clone(),
-            source,
+            team_id: Some(team_id.into()),
+            auth: state::Authentication::Dedicated(source),
             generation: String::new(),
             cookies,
             csrf: None,
@@ -322,9 +323,12 @@ impl DeveloperPortal {
                 "https://developer.apple.com/services-account/QH65B2/account/listTeams.action",
             )?,
         )?;
-        transaction.source.cookies = transaction.cookies.clone();
-        let bytes = serde_json::to_vec(&transaction.source)
-            .map_err(|_| anyhow::anyhow!("developer_state_invalid"))?;
+        let state::Authentication::Dedicated(mut source) = transaction.auth else {
+            bail!("developer_session_invalid");
+        };
+        source.cookies = transaction.cookies.clone();
+        let bytes =
+            serde_json::to_vec(&source).map_err(|_| anyhow::anyhow!("developer_state_invalid"))?;
         if bytes.len() > 1 << 20 {
             bail!("developer_state_too_large");
         }
@@ -385,18 +389,35 @@ impl DeveloperPortal {
             ),
         ];
         descriptors.into_iter().map(|(name,properties,required,read,destructive)| json!({"name":name,
-            "description":"Experimental undocumented Developer Portal operation. Separate interactive developer-login required. Writes default to a stored dry-run plan; execute only after explicit operator approval. Unknown delivery must never be retried.",
+            "description":"Experimental undocumented Developer Portal operation. Reuses eligible credentials from the configured reviewer when no dedicated Developer session exists; live Developer access and explicit Team verification remain required. Writes default to a stored dry-run plan; execute only after explicit operator approval. Unknown delivery must never be retried.",
             "inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},
             "annotations":{"readOnlyHint":read,"destructiveHint":destructive,"idempotentHint":read,"openWorldHint":true}})).collect()
     }
 
     pub async fn call(&self, name: &str, args: &Value) -> Result<Value> {
-        tokio::time::timeout(Duration::from_secs(120), self.call_inner(name, args))
-            .await
-            .map_err(|_| anyhow::anyhow!("developer_operation_timeout"))?
+        self.call_with_reviewer(name, args, None).await
     }
 
-    async fn call_inner(&self, name: &str, args: &Value) -> Result<Value> {
+    pub(crate) async fn call_with_reviewer(
+        &self,
+        name: &str,
+        args: &Value,
+        reviewer: Option<&crate::reviewer::Reviewer>,
+    ) -> Result<Value> {
+        tokio::time::timeout(
+            Duration::from_secs(120),
+            self.call_inner(name, args, reviewer),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("developer_operation_timeout"))?
+    }
+
+    async fn call_inner(
+        &self,
+        name: &str,
+        args: &Value,
+        reviewer: Option<&crate::reviewer::Reviewer>,
+    ) -> Result<Value> {
         let started = std::time::Instant::now();
         let write = match name {
             "create_app_group" => Some(groups::write_args(args, groups::Kind::Create)?),
@@ -419,17 +440,30 @@ impl DeveloperPortal {
             }
             _ => bail!("developer_tool_unknown"),
         };
-        let loaded = state::Transaction::load(&self.root, &self.source);
+        let loaded = state::Transaction::load_with_shared(
+            &self.root,
+            &self.source,
+            reviewer.map(crate::reviewer::Reviewer::shared_session),
+        );
         if name == "get_developer_connection_status" {
             return match loaded {
                 Ok(mut transaction) => {
-                    let team = transaction.source.team_id.clone();
-                    match self.verify_team(&mut transaction, &team).await {
-                        Ok(()) => {
+                    let team = transaction.team_id.clone();
+                    let verified = match &team {
+                        Some(team) => self.verify_team(&mut transaction, team).await.map(|()| 1),
+                        None => self.teams(&mut transaction).await.map(|teams| teams.len()),
+                    };
+                    match verified {
+                        Ok(count) => {
                             transaction.persist_overlay()?;
-                            Ok(
-                                json!({"configured":true,"status":"connected","team_id":team,"experimental":true}),
-                            )
+                            let mut status = json!({"configured":true,"status":"connected","auth_source":transaction.auth_source(),"experimental":true});
+                            if let Some(team) = team {
+                                status["team_id"] = json!(team);
+                            } else {
+                                status["team_count"] = json!(count);
+                                status["team_required_for_operations"] = json!(true);
+                            }
+                            Ok(status)
                         }
                         Err(_) => Ok(
                             json!({"configured":true,"status":"access_unverified","experimental":true}),

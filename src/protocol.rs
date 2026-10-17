@@ -95,7 +95,9 @@ impl Server {
                 .iter()
                 .any(|tool| tool["name"].as_str() == Some(name))
         {
-            return developer.call(name, args).await;
+            return developer
+                .call_with_reviewer(name, args, self.reviewer.as_ref())
+                .await;
         }
         let client = self
             .api
@@ -525,6 +527,61 @@ mod review_status_tests {
             .await
             .unwrap();
         assert!(response.get("error").is_some());
+    }
+
+    #[tokio::test]
+    async fn developer_reuses_existing_reviewer_session_without_second_login() {
+        let reviewer_origin = MockServer::start();
+        let developer_origin = MockServer::start();
+        let reviewer_root = tempfile::tempdir().unwrap();
+        let developer_root = tempfile::tempdir().unwrap();
+        let reviewer = Reviewer::for_test(&reviewer_origin.base_url(), reviewer_root.path());
+        let source_path = reviewer_root.path().join("session.cookie");
+        crate::reviewer::atomic_json(
+            &source_path,
+            &json!({"cookies":[
+                {"name":"myacinfo","value":"shared-synthetic-sso","domain":"apple.com","path":"/"},
+                {"name":"asc_only","value":"asc-host-secret","domain":"appstoreconnect.apple.com","path":"/"}
+            ]}),
+        )
+        .unwrap();
+        let source_before = std::fs::read(&source_path).unwrap();
+        let teams = developer_origin.mock(|when, then| {
+            when.method(httpmock::Method::POST)
+                .path("/services-account/QH65B2/account/listTeams.action")
+                .header("cookie", "myacinfo=shared-synthetic-sso");
+            then.header("content-type", "application/json")
+                .json_body(json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ","name":"Synthetic","status":"active"}]}));
+        });
+        let server = Server {
+            api: None,
+            reviewer: Some(reviewer),
+            developer: Some(
+                DeveloperPortal::for_test(
+                    &developer_origin.base_url(),
+                    developer_root.path(),
+                    &developer_root.path().join("session.cookie"),
+                )
+                .unwrap(),
+            ),
+        };
+        let response = server
+            .dispatch(
+                &call_request("get_developer_connection_status", json!({})),
+                &ready(),
+            )
+            .await
+            .unwrap();
+        let status = &response["result"]["structuredContent"];
+        assert_eq!(status["status"], "connected", "{response}");
+        assert_eq!(status["auth_source"], "shared_reviewer_session");
+        assert_eq!(status["team_count"], 1);
+        assert_eq!(status["team_required_for_operations"], true);
+        assert!(status.get("team_id").is_none());
+        assert_eq!(source_before, std::fs::read(&source_path).unwrap());
+        assert!(!reviewer_root.path().join("session.state.json").exists());
+        assert!(!developer_root.path().join("session.cookie").exists());
+        teams.assert_calls(1);
     }
 
     #[tokio::test]

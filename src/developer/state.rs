@@ -31,11 +31,17 @@ pub(super) struct Transaction {
     pub _lock: File,
     pub root: PathBuf,
     pub source_path: PathBuf,
-    pub source: Source,
+    pub auth: Authentication,
+    pub team_id: Option<String>,
     pub generation: String,
     pub cookies: Vec<PortalCookie>,
     pub csrf: Option<(String, String)>,
     pub secrets: std::collections::BTreeSet<String>,
+}
+
+pub(super) enum Authentication {
+    Dedicated(Source),
+    Shared(Box<super::shared::SharedState>),
 }
 
 pub(super) fn digest(bytes: &[u8]) -> String {
@@ -266,9 +272,39 @@ pub(super) fn optional_read(path: &Path, max: usize) -> Result<Option<Vec<u8>>> 
 }
 
 impl Transaction {
+    #[cfg(test)]
     pub fn load(root: &Path, source_path: &Path) -> Result<Self> {
+        Self::load_with_shared(root, source_path, None)
+    }
+
+    pub fn load_with_shared(
+        root: &Path,
+        source_path: &Path,
+        shared: Option<crate::reviewer::SharedSessionHandle>,
+    ) -> Result<Self> {
         let lock = acquire(root)?;
-        let bytes = fs_safe::private_read(source_path, 1 << 20)?;
+        let bytes = match optional_read(source_path, 1 << 20)? {
+            Some(bytes) => bytes,
+            None => {
+                let shared = super::shared::SharedState::load(
+                    root,
+                    shared.ok_or_else(|| anyhow::anyhow!("developer_session_required"))?,
+                )?;
+                let secrets = shared.secrets();
+                let cookies = shared.response_cookies();
+                return Ok(Self {
+                    _lock: lock,
+                    root: root.into(),
+                    source_path: source_path.into(),
+                    generation: shared.identity().into(),
+                    auth: Authentication::Shared(Box::new(shared)),
+                    team_id: None,
+                    cookies,
+                    csrf: None,
+                    secrets,
+                });
+            }
+        };
         let source: Source = serde_json::from_slice(&bytes)
             .map_err(|_| anyhow::anyhow!("developer_session_invalid"))?;
         if source.schema != 1
@@ -307,7 +343,8 @@ impl Transaction {
             _lock: lock,
             root: root.into(),
             source_path: source_path.into(),
-            source,
+            team_id: Some(source.team_id.clone()),
+            auth: Authentication::Dedicated(source),
             generation,
             cookies: effective,
             csrf: None,
@@ -355,13 +392,82 @@ impl Transaction {
     }
 
     pub fn ensure_generation(&self) -> Result<()> {
-        if digest(&fs_safe::private_read(&self.source_path, 1 << 20)?) != self.generation {
-            bail!("developer_session_changed");
+        match &self.auth {
+            Authentication::Dedicated(_) => {
+                if digest(&fs_safe::private_read(&self.source_path, 1 << 20)?) != self.generation {
+                    bail!("developer_session_changed");
+                }
+            }
+            Authentication::Shared(shared) => {
+                match std::fs::symlink_metadata(&self.source_path) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                    _ => bail!("developer_session_changed"),
+                }
+                shared.ensure_current()?;
+            }
         }
         Ok(())
     }
 
+    pub fn auth_source(&self) -> &'static str {
+        match &self.auth {
+            Authentication::Dedicated(_) => "dedicated_developer_session",
+            Authentication::Shared(_) => "shared_reviewer_session",
+        }
+    }
+
+    pub fn header(&self, target: &url::Url) -> Result<String> {
+        match &self.auth {
+            Authentication::Dedicated(_) => cookies::header(&self.cookies, target),
+            Authentication::Shared(shared) => shared.header(&self.cookies, target),
+        }
+    }
+
+    pub fn rotate_response(
+        &mut self,
+        headers: &reqwest::header::HeaderMap,
+        target: &url::Url,
+    ) -> Result<()> {
+        let previous = self.cookies.clone();
+        let rotation = match &mut self.auth {
+            Authentication::Dedicated(_) => cookies::rotate(&mut self.cookies, headers, target),
+            Authentication::Shared(shared) => shared.rotate(&mut self.cookies, headers, target),
+        };
+        let mut observed = previous
+            .iter()
+            .chain(&self.cookies)
+            .map(|cookie| cookie.value.clone())
+            .collect::<Vec<_>>();
+        if let Authentication::Shared(shared) = &self.auth {
+            observed.extend(shared.secrets());
+        }
+        observed.extend(
+            headers
+                .get_all(reqwest::header::SET_COOKIE)
+                .iter()
+                .filter_map(|value| {
+                    cookie::Cookie::parse(value.to_str().ok()?.to_owned())
+                        .ok()
+                        .map(|cookie| cookie.value().to_owned())
+                }),
+        );
+        if !self.generation.is_empty()
+            && (previous != self.cookies || matches!(self.auth, Authentication::Shared(_)))
+        {
+            self.persist_overlay()?;
+        }
+        self.remember_secrets(observed)?;
+        rotation
+    }
+
     pub fn persist_overlay(&self) -> Result<()> {
+        if let Authentication::Shared(shared) = &self.auth {
+            match std::fs::symlink_metadata(&self.source_path) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                _ => bail!("developer_session_changed"),
+            }
+            return shared.persist(&self.root, &self.cookies);
+        }
         self.ensure_generation()?;
         let overlay = Overlay {
             schema: 1,
