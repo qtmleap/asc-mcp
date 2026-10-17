@@ -27,6 +27,42 @@ mod shared;
 mod state;
 pub(crate) use cookies::PortalCookie;
 
+const MAX_RESPONSE_BYTES: usize = 8 << 20;
+
+fn decode_response(headers: &reqwest::header::HeaderMap, bytes: Vec<u8>) -> Result<Vec<u8>> {
+    use std::io::Read;
+
+    if bytes.len() > MAX_RESPONSE_BYTES {
+        bail!("developer_response_too_large");
+    }
+    let mut encodings = headers.get_all(reqwest::header::CONTENT_ENCODING).iter();
+    let Some(encoding) = encodings.next() else {
+        return Ok(bytes);
+    };
+    if encodings.next().is_some() {
+        bail!("developer_response_encoding_invalid");
+    }
+    let encoding = encoding
+        .to_str()
+        .map_err(|_| anyhow::anyhow!("developer_response_encoding_invalid"))?
+        .trim();
+    if encoding.eq_ignore_ascii_case("identity") {
+        return Ok(bytes);
+    }
+    if !encoding.eq_ignore_ascii_case("gzip") {
+        bail!("developer_response_encoding_invalid");
+    }
+    let mut decoded = Vec::new();
+    flate2::read::MultiGzDecoder::new(bytes.as_slice())
+        .take(MAX_RESPONSE_BYTES as u64 + 1)
+        .read_to_end(&mut decoded)
+        .map_err(|_| anyhow::anyhow!("developer_response_encoding_invalid"))?;
+    if decoded.len() > MAX_RESPONSE_BYTES {
+        bail!("developer_response_too_large");
+    }
+    Ok(decoded)
+}
+
 #[derive(Clone)]
 pub struct DeveloperPortal {
     client: Client,
@@ -104,6 +140,7 @@ impl DeveloperPortal {
 
     fn new(endpoint: Url, root: PathBuf, source: PathBuf) -> Result<Self> {
         let client = Client::builder()
+            .user_agent(concat!("asc-mcp/", env!("CARGO_PKG_VERSION")))
             .redirect(reqwest::redirect::Policy::none())
             .retry(reqwest::retry::never())
             .timeout(Duration::from_secs(30))
@@ -176,6 +213,9 @@ impl DeveloperPortal {
         if let Some((csrf, stamp)) = &transaction.csrf {
             request = request.header("csrf", csrf).header("csrf_ts", stamp);
         }
+        if fields.is_empty() {
+            request = request.header(reqwest::header::CONTENT_LENGTH, "0");
+        }
         let mut response = request
             .form(&fields)
             .send()
@@ -191,7 +231,7 @@ impl DeveloperPortal {
                 .collect::<Vec<_>>(),
         )?;
         if !response.status().is_success() {
-            bail!("developer_http_failed");
+            bail!("developer_http_failed:{}", response.status().as_u16());
         }
         let media = headers
             .get(reqwest::header::CONTENT_TYPE)
@@ -229,11 +269,12 @@ impl DeveloperPortal {
             .await
             .map_err(|_| anyhow::anyhow!("developer_transport_failed"))?
         {
-            if bytes.len() + chunk.len() > 8 << 20 {
+            if bytes.len() + chunk.len() > MAX_RESPONSE_BYTES {
                 bail!("developer_response_too_large");
             }
             bytes.extend_from_slice(&chunk);
         }
+        let bytes = decode_response(&headers, bytes)?;
         let body: Value = serde_json::from_slice(&bytes)
             .map_err(|_| anyhow::anyhow!("developer_response_invalid"))?;
         transaction.reject_secret_echo(&body)?;
