@@ -12,6 +12,11 @@ on:
         default: '["Linux","macos-latest"]'
   workflow_call:
     inputs:
+      ci-force-heavy:
+        description: Run full validation when called by another workflow.
+        type: boolean
+        default: true
+        required: false
       test-os:
         type: string
         default: '["Linux","macos-latest"]'
@@ -25,39 +30,71 @@ concurrency:
   group: integration-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 jobs:
+  ci-change-scope:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-change-scope.yaml
+    with:
+      doc-paths: '["AGENTS.md","CHANGELOG.md","CLAUDE.md","docs/developer-portal.md","docs/development/ci-change-scope.md","docs/docker-sidecar.md","docs/rust-login.md","docs/rust-reviewer.md","docs/superpowers/plans/2026-10-05-reviewer-api.md","docs/superpowers/plans/2026-10-05-rust-migration.md","docs/superpowers/plans/2026-10-07-auth-recovery.md","docs/superpowers/plans/2026-10-17-app-groups.md","docs/superpowers/plans/2026-10-17-shared-apple-session.md","docs/superpowers/specs/2026-10-07-auth-recovery-design.md","docs/superpowers/specs/2026-10-17-app-groups-design.md","docs/superpowers/specs/2026-10-17-shared-apple-session-design.md"]'
+      doc-prefixes: '[]'
+      runner: '["self-hosted","ubuntu-latest"]'
+      force-heavy: ${{ inputs['ci-force-heavy'] == true }}
+
   test:
+    if: ${{ !cancelled() && (true) }}
+    needs: ["ci-change-scope"]
     strategy:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(inputs.test-os || '["Linux","macos-latest"]') }}
     # Linux uses the docker-capable X64 fleet; other values select a native self-hosted runner by label.
-    runs-on: ${{ matrix.os == 'Linux' && fromJSON('["self-hosted","Linux","X64","docker"]') || fromJSON(format('["self-hosted","{0}"]', matrix.os)) }}
+    runs-on: ${{ fromJSON((needs['ci-change-scope'].result == 'success' && needs['ci-change-scope'].outputs.docs_only == 'true') && '["self-hosted","ubuntu-latest"]' || toJSON(matrix.os == 'Linux' && fromJSON('["self-hosted","Linux","X64","docker"]') || fromJSON(format('["self-hosted","{0}"]', matrix.os)))) }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
       - name: Format
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: cargo fmt --all -- --check
       - name: Lint
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Tests and offline Go request compatibility fixtures
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: cargo test --all-targets --locked
       - name: Release build
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: cargo build --release --locked
       - name: CLI smoke
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: cargo run --locked -- version
 
+      - name: Docs-only exemption
+        if: ${{ needs['ci-change-scope'].result == 'success' && needs['ci-change-scope'].outputs.docs_only == 'true' }}
+        shell: bash
+        working-directory: .
+        env:
+          CI_CHANGE_REASON: ${{ needs['ci-change-scope'].outputs.reason }}
+        run: |
+          printf '%s\n' "$CI_CHANGE_REASON" >> "$GITHUB_STEP_SUMMARY"
   docker:
-    if: ${{ !inputs.skip-docker }}
-    runs-on: [self-hosted, Linux, X64, docker]
+    needs: ["ci-change-scope"]
+    if: ${{ !cancelled() && (true) && (!inputs.skip-docker) }}
+    runs-on: ${{ fromJSON((needs['ci-change-scope'].result == 'success' && needs['ci-change-scope'].outputs.docs_only == 'true') && '["self-hosted","ubuntu-latest"]' || '["self-hosted","Linux","X64","docker"]') }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
       - uses: docker/setup-buildx-action@v3
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
       - uses: docker/build-push-action@v6
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         with:
           context: .
           load: true
@@ -65,8 +102,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Distroless native binary smoke
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: docker run --rm asc-mcp-ci:latest version
       - name: Default HTTP sidecar smoke
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: |
           sidecar_id=$(docker run -d --network none -e ASC_MCP_AUTH_TOKENS=ci-sidecar-token asc-mcp-ci:latest)
           trap 'docker rm -f "$sidecar_id" >/dev/null 2>&1 || true' EXIT
@@ -81,4 +120,14 @@ jobs:
             --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci-sidecar-smoke","version":"1"}}}' \
             http://127.0.0.1:8080/mcp | python3 -c 'import json,sys; response=json.load(sys.stdin); assert response["result"]["serverInfo"]["name"] == "asc-mcp"'
       - name: Compose configuration
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: ./script/docker/compose.sh standalone config -q
+
+      - name: Docs-only exemption
+        if: ${{ needs['ci-change-scope'].result == 'success' && needs['ci-change-scope'].outputs.docs_only == 'true' }}
+        shell: bash
+        working-directory: .
+        env:
+          CI_CHANGE_REASON: ${{ needs['ci-change-scope'].outputs.reason }}
+        run: |
+          printf '%s\n' "$CI_CHANGE_REASON" >> "$GITHUB_STEP_SUMMARY"
