@@ -65,9 +65,10 @@ key. Set `ASC_REVIEW_APP_ID` only for message monitoring. The legacy
 
 ## Experimental App Group tools
 
-App Group registration uses a separate Developer Portal session, not the public
-API key or reviewer session. Explicitly opt in with
-`ASC_DEVELOPER_APP_GROUPS_ENABLED=true`. Native and Docker login instructions,
+App Group registration uses the Developer Portal, never the public API key.
+When no dedicated Developer session exists, the server can reuse eligible
+credentials from its configured reviewer session and verify Developer access.
+Explicitly opt in with `ASC_DEVELOPER_APP_GROUPS_ENABLED=true`. Native and Docker setup,
 confirmation requirements and write-recovery limitations are in
 [Developer Portal setup](docs/developer-portal.md). Enabling the feature does not
 log in or mutate an Apple resource. Developer-only configuration supports `tools`,

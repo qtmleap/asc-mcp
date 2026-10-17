@@ -322,7 +322,13 @@ impl DeveloperPortal {
                     transaction,
                     endpoint,
                     vec![
-                        ("teamId".into(), transaction.source.team_id.clone()),
+                        (
+                            "teamId".into(),
+                            transaction
+                                .team_id
+                                .clone()
+                                .ok_or_else(|| anyhow::anyhow!("developer_team_required"))?,
+                        ),
                         ("pageSize".into(), "100".into()),
                         ("pageNumber".into(), page.to_string()),
                     ],
@@ -430,7 +436,13 @@ impl DeveloperPortal {
                 transaction,
                 Endpoint::Detail,
                 vec![
-                    ("teamId".into(), transaction.source.team_id.clone()),
+                    (
+                        "teamId".into(),
+                        transaction
+                            .team_id
+                            .clone()
+                            .ok_or_else(|| anyhow::anyhow!("developer_team_required"))?,
+                    ),
                     ("appIdId".into(), app.into()),
                 ],
             )
@@ -523,9 +535,7 @@ impl DeveloperPortal {
     ) -> Result<Value> {
         let app = self.app_id(transaction, bundle).await?;
         let ids = self.associations(transaction, bundle, &app).await?;
-        Ok(
-            json!({"team_id":transaction.source.team_id,"bundle_id":bundle,"app_id":app,"group_ids":ids}),
-        )
+        Ok(json!({"team_id":transaction.team_id,"bundle_id":bundle,"app_id":app,"group_ids":ids}))
     }
 
     pub(super) async fn prepare_mutation(
@@ -680,12 +690,9 @@ fn mutation_ready(
     } else {
         Endpoint::Associate
     };
-    super::cookies::header(
-        &transaction.cookies,
-        &url::Url::parse(&format!(
-            "https://developer.apple.com/services-account/QH65B2/{}",
-            endpoint.path()
-        ))?,
-    )?;
+    transaction.header(&url::Url::parse(&format!(
+        "https://developer.apple.com/services-account/QH65B2/{}",
+        endpoint.path()
+    ))?)?;
     Ok(())
 }

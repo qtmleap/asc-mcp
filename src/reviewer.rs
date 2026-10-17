@@ -31,7 +31,10 @@ mod reply;
 #[cfg(test)]
 mod reply_tests;
 mod session;
+mod shared;
 mod status;
+
+pub(crate) use shared::{SharedCookie, SharedSessionHandle, SharedSnapshot};
 
 const MAX_BODY: usize = 8 * 1024 * 1024;
 const MAX_SESSION: usize = 1024 * 1024;

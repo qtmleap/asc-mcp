@@ -14,8 +14,8 @@ This guide builds, starts, validates and manages the MCP server with Docker
 Compose. The macOS login-helper prerequisite is described separately below;
 native development is covered in [SETUP.md](SETUP.md).
 
-Experimental App Group registration and iOS App ID association have a separate
-opt-in and interactive Developer Portal login; see
+Experimental App Group registration and iOS App ID association are opt-in and
+can reuse the configured reviewer's existing Apple ID session; see
 [Developer Portal setup and safety limits](docs/developer-portal.md).
 
 ## Quick start (Docker)

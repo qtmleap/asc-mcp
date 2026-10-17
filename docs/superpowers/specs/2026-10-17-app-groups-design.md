@@ -1,5 +1,9 @@
 # App Group registration through ASC MCP
 
+Authentication separation in this historical design is superseded by
+`2026-10-17-shared-apple-session-design.md`. The fixed-origin transport,
+explicit Team checks and write-delivery safeguards remain applicable.
+
 ## Intent and delivery
 
 Add experimental App Group listing, registration and additive iOS App ID association to `qtmleap/asc-mcp`, with tests and a pull request against `master`. The human approved this scope and a dedicated worktree. This work does not deploy the MCP, perform live Apple mutations, change certificates/profiles, delete groups or alter the iFakerX app. An existing ASC API key or reviewer connection is not proof of Developer Portal authorization.

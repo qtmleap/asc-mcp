@@ -9,7 +9,10 @@ pub(super) struct Snapshot {
 }
 
 pub(super) enum Update {
-    Set(Cookie),
+    Set {
+        cookie: Cookie,
+        expected: Option<String>,
+    },
     Remove {
         key: (String, String, String),
         expected: Option<String>,
@@ -18,7 +21,7 @@ pub(super) enum Update {
 impl Update {
     pub fn cookie(&self) -> Option<&Cookie> {
         match self {
-            Self::Set(c) => Some(c),
+            Self::Set { cookie, .. } => Some(cookie),
             _ => None,
         }
     }
@@ -34,13 +37,13 @@ fn key(c: &Cookie) -> (String, String, String) {
         },
     )
 }
-struct Lock(fs::File);
+pub(super) struct Lock(fs::File);
 impl Drop for Lock {
     fn drop(&mut self) {
         let _ = fs2::FileExt::unlock(&self.0);
     }
 }
-fn lock(root: &Path) -> Result<Lock> {
+pub(super) fn lock(root: &Path) -> Result<Lock> {
     let file = super::open_private_lock(root, ".session.lock")?;
     let start = Instant::now();
     loop {
@@ -64,7 +67,7 @@ pub(super) fn replace(source: &Path, root: &Path, data: &Value) -> Result<()> {
     atomic_json(source, data)?;
     Ok(())
 }
-fn read(source: &Path, root: &Path) -> Result<Snapshot> {
+pub(super) fn read(source: &Path, root: &Path) -> Result<Snapshot> {
     // Source removal revokes this client; never silently continue with an old overlay.
     let bytes = private_read(source, MAX_SESSION)?;
     let generation = hex::encode(Sha256::digest(&bytes));
@@ -108,11 +111,13 @@ pub(super) async fn persist(
         }
         for update in updates {
             match update {
-                Update::Set(cookie) => {
+                Update::Set { cookie, expected } => {
                     let k = key(&cookie);
                     if let Some(i) = current.cookies.iter().position(|c| key(c) == k) {
-                        current.cookies[i] = cookie;
-                    } else if current.cookies.len() < 150 {
+                        if expected.as_ref() == Some(&current.cookies[i].value) {
+                            current.cookies[i] = cookie;
+                        }
+                    } else if expected.is_none() && current.cookies.len() < 150 {
                         current.cookies.push(cookie);
                     }
                 }
@@ -233,8 +238,11 @@ pub(super) fn updates(headers: &HeaderMap, url: &Url, sent: &[Cookie]) -> Vec<Up
                 key: k,
             });
         } else {
-            observed.insert(key(&candidate), candidate.value.clone());
-            result.push(Update::Set(candidate));
+            let expected = observed.insert(key(&candidate), candidate.value.clone());
+            result.push(Update::Set {
+                cookie: candidate,
+                expected,
+            });
         }
     }
     result

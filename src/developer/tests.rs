@@ -27,6 +27,414 @@ fn portal(server: &MockServer, root: &std::path::Path) -> DeveloperPortal {
     DeveloperPortal::for_test(&server.base_url(), root, &root.join("session.cookie")).unwrap()
 }
 
+fn shared_server(server: &MockServer, root: &std::path::Path) -> crate::protocol::Server {
+    shared_service(&server.base_url(), root)
+}
+
+fn shared_service(endpoint: &str, root: &std::path::Path) -> crate::protocol::Server {
+    let review_root = root.join("reviewer");
+    let reviewer = crate::reviewer::Reviewer::for_test(endpoint, &review_root);
+    crate::reviewer::atomic_json(
+        &review_root.join("session.cookie"),
+        &json!({"cookies":[
+            {"name":"myacinfo","value":"shared-synthetic-sso","domain":"apple.com","path":"/"},
+            {"name":"asc_only","value":"asc-private-sentinel","domain":"appstoreconnect.apple.com","path":"/"}
+        ]}),
+    ).unwrap();
+    crate::protocol::Server {
+        api: None,
+        reviewer: Some(reviewer),
+        developer: Some(
+            DeveloperPortal::for_test(
+                endpoint,
+                &root.join("developer"),
+                &root.join("developer/session.cookie"),
+            )
+            .unwrap(),
+        ),
+    }
+}
+
+#[tokio::test]
+async fn shared_authentication_respects_present_invalid_dedicated_source() {
+    for invalid in [b"invalid".as_slice(), b"{}".as_slice()] {
+        let server = MockServer::start();
+        let request = team(&server);
+        let root = tempfile::tempdir().unwrap();
+        let service = shared_server(&server, root.path());
+        fs_safe::atomic_write(&root.path().join("developer/session.cookie"), invalid).unwrap();
+        let status = service
+            .call("get_developer_connection_status", &json!({}))
+            .await
+            .unwrap();
+        assert_eq!(status["status"], "authentication_required");
+        request.assert_calls(0);
+    }
+}
+
+#[tokio::test]
+async fn shared_authentication_never_falls_back_through_dedicated_symlinks() {
+    use std::os::unix::fs::symlink;
+    for dangling in [false, true] {
+        let server = MockServer::start();
+        let request = team(&server);
+        let root = tempfile::tempdir().unwrap();
+        let service = shared_server(&server, root.path());
+        let target = root.path().join("private-dedicated");
+        if !dangling {
+            fs_safe::atomic_write(&target, b"invalid").unwrap();
+        }
+        fs::create_dir_all(root.path().join("developer")).unwrap();
+        symlink(target, root.path().join("developer/session.cookie")).unwrap();
+        let status = service
+            .call("get_developer_connection_status", &json!({}))
+            .await
+            .unwrap();
+        assert_eq!(status["status"], "authentication_required");
+        request.assert_calls(0);
+    }
+}
+
+#[tokio::test]
+async fn shared_suppression_cannot_override_a_newer_reviewer_key() {
+    let server = MockServer::start();
+    let removed = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/listTeams.action")
+            .header(
+                "cookie",
+                "dsid=old-shared-aux; myacinfo=shared-synthetic-sso",
+            );
+        then.header("content-type", "application/json")
+            .header(
+                "set-cookie",
+                "dsid=deleted; Domain=apple.com; Path=/; Secure; Max-Age=0",
+            )
+            .json_body(json!({"resultCode":0,"teams":[]}));
+    });
+    let newer = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/listTeams.action")
+            .header(
+                "cookie",
+                "dsid=newer-shared-aux; myacinfo=shared-synthetic-sso",
+            );
+        then.header("content-type", "application/json")
+            .json_body(json!({"resultCode":0,"teams":[]}));
+    });
+    let root = tempfile::tempdir().unwrap();
+    let service = shared_server(&server, root.path());
+    let source = root.path().join("reviewer/session.cookie");
+    let mut value: Value = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
+    value["cookies"].as_array_mut().unwrap().push(json!({
+        "name":"dsid","value":"old-shared-aux","domain":"apple.com","path":"/"
+    }));
+    crate::reviewer::atomic_json(&source, &value).unwrap();
+    let status = service
+        .call("get_developer_connection_status", &json!({}))
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "connected");
+    let handle = service.reviewer.as_ref().unwrap().shared_session();
+    let snapshot = handle.snapshot().unwrap();
+    assert!(
+        snapshot
+            .cookies
+            .iter()
+            .any(|cookie| cookie.name == "dsid" && cookie.value == "old-shared-aux")
+    );
+    handle
+        .rotate(
+            &snapshot,
+            &[crate::reviewer::SharedCookie {
+                name: "dsid".into(),
+                value: "newer-shared-aux".into(),
+                expires: None,
+            }],
+        )
+        .unwrap();
+    let status = service
+        .call("get_developer_connection_status", &json!({}))
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "connected");
+    removed.assert_calls(1);
+    newer.assert_calls(1);
+}
+
+#[tokio::test]
+async fn shared_revocation_is_durable_when_auxiliary_rotation_races_persistence() {
+    for rotate_before_response in [false, true] {
+        let server = MockServer::start();
+        let request = team(&server);
+        let root = tempfile::tempdir().unwrap();
+        let service = shared_server(&server, root.path());
+        let source = root.path().join("reviewer/session.cookie");
+        let mut value: Value = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
+        value["cookies"].as_array_mut().unwrap().push(
+            json!({"name":"auxiliary","value":"auxiliary-before","domain":"apple.com","path":"/"}),
+        );
+        crate::reviewer::atomic_json(&source, &value).unwrap();
+        let handle = service.reviewer.as_ref().unwrap().shared_session();
+        let mut transaction = state::Transaction::load_with_shared(
+            &root.path().join("developer"),
+            &root.path().join("developer/session.cookie"),
+            Some(handle.clone()),
+        )
+        .unwrap();
+        let rotate = || {
+            let snapshot = handle.snapshot().unwrap();
+            handle
+                .rotate(
+                    &snapshot,
+                    &[crate::reviewer::SharedCookie {
+                        name: "auxiliary".into(),
+                        value: "auxiliary-after".into(),
+                        expires: None,
+                    }],
+                )
+                .unwrap();
+        };
+        if rotate_before_response {
+            rotate();
+        }
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            "set-cookie",
+            "myacinfo=deleted; Domain=apple.com; Path=/; Secure; Max-Age=0"
+                .parse()
+                .unwrap(),
+        );
+        let state::Authentication::Shared(shared) = &mut transaction.auth else {
+            panic!("shared authentication expected");
+        };
+        assert!(
+            shared
+                .rotate(
+                    &mut transaction.cookies,
+                    &headers,
+                    &Url::parse("https://developer.apple.com/").unwrap()
+                )
+                .is_err()
+        );
+        if !rotate_before_response {
+            rotate();
+        }
+        assert!(transaction.persist_overlay().is_err());
+        drop(transaction);
+        let status = service
+            .call("get_developer_connection_status", &json!({}))
+            .await
+            .unwrap();
+        assert_eq!(status["status"], "authentication_required");
+        request.assert_calls(0);
+    }
+}
+
+#[tokio::test]
+async fn suppressed_unsent_cookie_rotation_stays_developer_local() {
+    let server = MockServer::start();
+    let remove = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/listTeams.action")
+            .header(
+                "cookie",
+                "dsid=original-auxiliary; myacinfo=shared-synthetic-sso",
+            );
+        then.header("content-type", "application/json")
+            .header(
+                "set-cookie",
+                "dsid=deleted; Domain=apple.com; Path=/; Secure; Max-Age=0",
+            )
+            .json_body(json!({"resultCode":0,"teams":[]}));
+    });
+    let replace = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/listTeams.action")
+            .header("cookie", "myacinfo=shared-synthetic-sso");
+        then.header("content-type", "application/json")
+            .header(
+                "set-cookie",
+                "dsid=developer-local-auxiliary; Domain=apple.com; Path=/; Secure",
+            )
+            .json_body(json!({"resultCode":0,"teams":[]}));
+    });
+    let local = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/listTeams.action")
+            .header(
+                "cookie",
+                "myacinfo=shared-synthetic-sso; dsid=developer-local-auxiliary",
+            );
+        then.header("content-type", "application/json")
+            .json_body(json!({"resultCode":0,"teams":[]}));
+    });
+    let rebased = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/listTeams.action")
+            .header(
+                "cookie",
+                "dsid=reviewer-advanced-auxiliary; myacinfo=shared-synthetic-sso",
+            );
+        then.header("content-type", "application/json")
+            .json_body(json!({"resultCode":0,"teams":[]}));
+    });
+    let root = tempfile::tempdir().unwrap();
+    let service = shared_server(&server, root.path());
+    let source = root.path().join("reviewer/session.cookie");
+    let mut value: Value = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
+    value["cookies"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"name":"dsid","value":"original-auxiliary","domain":"apple.com","path":"/"}));
+    crate::reviewer::atomic_json(&source, &value).unwrap();
+    for _ in 0..3 {
+        let status = service
+            .call("get_developer_connection_status", &json!({}))
+            .await
+            .unwrap();
+        assert_eq!(status["status"], "connected");
+        let snapshot = service
+            .reviewer
+            .as_ref()
+            .unwrap()
+            .shared_session()
+            .snapshot()
+            .unwrap();
+        assert!(
+            snapshot
+                .cookies
+                .iter()
+                .any(|cookie| cookie.name == "dsid" && cookie.value == "original-auxiliary")
+        );
+    }
+    remove.assert_calls(1);
+    replace.assert_calls(1);
+    local.assert_calls(1);
+    let handle = service.reviewer.as_ref().unwrap().shared_session();
+    let snapshot = handle.snapshot().unwrap();
+    handle
+        .rotate(
+            &snapshot,
+            &[crate::reviewer::SharedCookie {
+                name: "dsid".into(),
+                value: "reviewer-advanced-auxiliary".into(),
+                expires: None,
+            }],
+        )
+        .unwrap();
+    let status = service
+        .call("get_developer_connection_status", &json!({}))
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "connected");
+    rebased.assert_calls(1);
+}
+
+#[tokio::test]
+async fn shared_authentication_requires_explicit_live_team_membership() {
+    let server = MockServer::start();
+    let request = team(&server);
+    let listed = groups(&server);
+    let root = tempfile::tempdir().unwrap();
+    let service = shared_server(&server, root.path());
+    assert!(
+        service
+            .call("list_app_groups", &json!({"team_id":"1234567890"}))
+            .await
+            .is_err()
+    );
+    listed.assert_calls(0);
+    let result = service
+        .call("list_app_groups", &json!({"team_id":"ABCDEFGHIJ"}))
+        .await
+        .unwrap();
+    assert_eq!(result["team_id"], "ABCDEFGHIJ");
+    assert_eq!(result["groups"][0]["identifier"], "group.example.old");
+    request.assert_calls(2);
+    listed.assert_calls(1);
+}
+
+#[tokio::test]
+async fn shared_sso_rotation_is_reused_without_copying_authentication_source() {
+    let server = MockServer::start();
+    let first = server.mock(|when, then| {
+        when.method(POST)
+            .path("/services-account/QH65B2/account/listTeams.action")
+            .header("cookie", "myacinfo=shared-synthetic-sso");
+        then.header("content-type", "application/json")
+            .header(
+                "set-cookie",
+                "myacinfo=rotated-shared-sso; Domain=apple.com; Path=/; Secure",
+            )
+            .json_body(json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}));
+    });
+    let second = server.mock(|when, then| {
+        when.method(POST)
+            .path("/services-account/QH65B2/account/listTeams.action")
+            .header("cookie", "myacinfo=rotated-shared-sso");
+        then.header("content-type", "application/json")
+            .json_body(json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}));
+    });
+    let root = tempfile::tempdir().unwrap();
+    let service = shared_server(&server, root.path());
+    let source_path = root.path().join("reviewer/session.cookie");
+    let original = fs::read(&source_path).unwrap();
+    for _ in 0..2 {
+        let status = service
+            .call("get_developer_connection_status", &json!({}))
+            .await
+            .unwrap();
+        assert_eq!(status["status"], "connected");
+        assert_eq!(status["auth_source"], "shared_reviewer_session");
+        assert!(status.get("team_id").is_none());
+    }
+    first.assert_calls(1);
+    second.assert_calls(1);
+    assert_eq!(original, fs::read(&source_path).unwrap());
+    assert!(!root.path().join("developer/session.cookie").exists());
+    assert!(!root.path().join("developer/overlay.json").exists());
+    let overlay = fs::read_to_string(root.path().join("developer/shared-overlay.json")).unwrap();
+    assert!(!overlay.contains("shared-synthetic-sso"));
+    assert!(!overlay.contains("rotated-shared-sso"));
+    assert!(!overlay.contains("asc-private-sentinel"));
+}
+
+#[tokio::test]
+async fn shared_revocation_survives_restart_and_unrelated_reviewer_rotation() {
+    let server = MockServer::start();
+    let request = server.mock(|when, then| {
+        when.method(POST)
+            .path("/services-account/QH65B2/account/listTeams.action");
+        then.header("content-type", "application/json")
+            .header(
+                "set-cookie",
+                "myacinfo=deleted; Domain=apple.com; Path=/; Secure; Max-Age=0",
+            )
+            .json_body(json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}));
+    });
+    let root = tempfile::tempdir().unwrap();
+    let mut service = shared_server(&server, root.path());
+    let status = service
+        .call("get_developer_connection_status", &json!({}))
+        .await
+        .unwrap();
+    assert_ne!(status["status"], "connected");
+    service.developer = Some(portal(&server, &root.path().join("developer")));
+    let source = fs::read(root.path().join("reviewer/session.cookie")).unwrap();
+    crate::reviewer::atomic_json(
+        &root.path().join("reviewer/session.state.json"),
+        &json!({
+            "generation":state::digest(&source),
+            "cookies":[
+                {"name":"myacinfo","value":"shared-synthetic-sso","domain":"apple.com","path":"/"},
+                {"name":"other","value":"new-unrelated-value","domain":"apple.com","path":"/"}
+            ]
+        }),
+    )
+    .unwrap();
+    let status = service
+        .call("get_developer_connection_status", &json!({}))
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "authentication_required");
+    request.assert_calls(1);
+}
+
 #[test]
 fn developer_cookie_scope_is_not_asc_scope() {
     let url = url::Url::parse(
@@ -414,6 +822,9 @@ struct FixtureState {
     fail_detail_on: Option<usize>,
     change_detail_on: Option<usize>,
     replace_on_detail: Option<(usize, std::path::PathBuf, Vec<u8>)>,
+    replace_on_mutation: Option<(std::path::PathBuf, Vec<u8>)>,
+    block_overlay_on_mutation: Option<std::path::PathBuf>,
+    mutation_cookie: Option<String>,
 }
 
 impl Drop for StatefulFixture {
@@ -459,7 +870,19 @@ impl StatefulFixture {
                 else if path.ends_with("assignApplicationGroupToAppId.action") { state.mutation_count += 1; state.associated = true; json!({"resultCode":0,"appId":detail(true)}) }
                 else { json!({"resultCode":404}) };
                 let token = if path.ends_with("listApplicationGroups.action") { "fixture-csrf" } else { "unrelated-token" };
-                ([ ("csrf",token), ("csrf_ts","123") ], axum::Json(body))
+                let mutation = path.ends_with("addApplicationGroup.action") || path.ends_with("assignApplicationGroupToAppId.action");
+                let mut headers = reqwest::header::HeaderMap::new();
+                headers.insert("csrf", token.parse().unwrap());
+                headers.insert("csrf_ts", "123".parse().unwrap());
+                if mutation {
+                    if let Some((path, bytes)) = &state.replace_on_mutation { fs_safe::atomic_write(path, bytes).unwrap(); }
+                    if let Some(path) = &state.block_overlay_on_mutation {
+                        fs::remove_file(path).unwrap();
+                        fs::create_dir(path).unwrap();
+                    }
+                    if let Some(cookie) = &state.mutation_cookie { headers.insert("set-cookie", cookie.parse().unwrap()); }
+                }
+                (headers, axum::Json(body))
             }
         }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -483,6 +906,208 @@ fn execution(prepared: &serde_json::Value, mut args: serde_json::Value) -> serde
     args["operation_id"] = prepared["operation_id"].clone();
     args["confirmation_token"] = prepared["confirmation_token"].clone();
     args
+}
+
+#[tokio::test]
+async fn shared_create_and_associate_preserve_confirmation_across_rotation() {
+    let fixture = StatefulFixture::start().await;
+    let root = tempfile::tempdir().unwrap();
+    let service = shared_service(&fixture.endpoint, root.path());
+    let create = json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","name":"New"});
+    let prepared = service.call("create_app_group", &create).await.unwrap();
+    let handle = service.reviewer.as_ref().unwrap().shared_session();
+    let snapshot = handle.snapshot().unwrap();
+    handle
+        .rotate(
+            &snapshot,
+            &[crate::reviewer::SharedCookie {
+                name: "myacinfo".into(),
+                value: "same-source-rotated-sso".into(),
+                expires: None,
+            }],
+        )
+        .unwrap();
+    let result = service
+        .call("create_app_group", &execution(&prepared, create))
+        .await
+        .unwrap();
+    assert_eq!(result["state"], "verified");
+    let associate = json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","bundle_id":"com.example.app"});
+    let prepared = service
+        .call("associate_app_group", &associate)
+        .await
+        .unwrap();
+    let result = service
+        .call("associate_app_group", &execution(&prepared, associate))
+        .await
+        .unwrap();
+    assert_eq!(result["state"], "verified");
+    assert_eq!(fixture.state.lock().unwrap().mutation_count, 2);
+}
+
+#[tokio::test]
+async fn shared_confirmation_is_revoked_by_source_replacement_or_dedicated_appearance() {
+    for dedicated in [false, true] {
+        let fixture = StatefulFixture::start().await;
+        let root = tempfile::tempdir().unwrap();
+        let service = shared_service(&fixture.endpoint, root.path());
+        let args = json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","name":"New"});
+        let prepared = service.call("create_app_group", &args).await.unwrap();
+        if dedicated {
+            service
+                .developer
+                .as_ref()
+                .unwrap()
+                .publish_login("ABCDEFGHIJ", vec![seed()])
+                .await
+                .unwrap();
+        } else {
+            crate::reviewer::atomic_json(&root.path().join("reviewer/session.cookie"), &json!({"cookies":[
+                {"name":"myacinfo","value":"replacement-account-sso","domain":"apple.com","path":"/"}
+            ]})).unwrap();
+        }
+        assert!(
+            service
+                .call("create_app_group", &execution(&prepared, args))
+                .await
+                .is_err()
+        );
+        assert_eq!(fixture.state.lock().unwrap().mutation_count, 0);
+    }
+}
+
+#[tokio::test]
+async fn shared_post_dispatch_cas_or_storage_failure_blocks_after_mode_switch() {
+    for storage_failure in [false, true] {
+        let fixture = StatefulFixture::start().await;
+        let root = tempfile::tempdir().unwrap();
+        let service = shared_service(&fixture.endpoint, root.path());
+        let args = json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","name":"New"});
+        let prepared = service.call("create_app_group", &args).await.unwrap();
+        {
+            let mut state = fixture.state.lock().unwrap();
+            if storage_failure {
+                state.block_overlay_on_mutation =
+                    Some(root.path().join("developer/shared-overlay.json"));
+            } else {
+                let source = fs::read(root.path().join("reviewer/session.cookie")).unwrap();
+                state.replace_on_mutation = Some((root.path().join("reviewer/session.state.json"), serde_json::to_vec(&json!({
+                    "generation":state::digest(&source),
+                    "cookies":[{"name":"myacinfo","value":"concurrent-newer-sso","domain":"apple.com","path":"/"}]
+                })).unwrap()));
+                state.mutation_cookie =
+                    Some("myacinfo=stale-response-sso; Domain=apple.com; Path=/; Secure".into());
+            }
+        }
+        let result = service
+            .call("create_app_group", &execution(&prepared, args.clone()))
+            .await
+            .unwrap();
+        assert_eq!(result["state"], "delivery_unknown");
+        if !storage_failure {
+            let snapshot = service
+                .reviewer
+                .as_ref()
+                .unwrap()
+                .shared_session()
+                .snapshot()
+                .unwrap();
+            assert!(
+                snapshot
+                    .cookies
+                    .iter()
+                    .any(|cookie| cookie.name == "myacinfo"
+                        && cookie.value == "concurrent-newer-sso")
+            );
+        }
+        service
+            .developer
+            .as_ref()
+            .unwrap()
+            .publish_login("ABCDEFGHIJ", vec![seed()])
+            .await
+            .unwrap();
+        assert_eq!(
+            service
+                .call("create_app_group", &args)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "developer_target_delivery_unknown"
+        );
+        let status = service
+            .call(
+                "get_app_group_write_status",
+                &json!({"operation_id":prepared["operation_id"]}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(status["state"], "delivery_unknown");
+        assert_eq!(fixture.state.lock().unwrap().mutation_count, 1);
+    }
+}
+
+#[tokio::test]
+async fn dedicated_unknown_receipts_remain_blocking_in_shared_mode() {
+    let server = MockServer::start();
+    team(&server);
+    groups(&server);
+    let mutation = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/ios/identifiers/addApplicationGroup.action");
+        then.status(503);
+    });
+    let root = tempfile::tempdir().unwrap();
+    let service = shared_server(&server, root.path());
+    let client = service.developer.as_ref().unwrap();
+    client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap();
+    let args = json!({"team_id":"ABCDEFGHIJ","identifier":"group.example.new","name":"New"});
+    let prepared = service.call("create_app_group", &args).await.unwrap();
+    let result = service
+        .call("create_app_group", &execution(&prepared, args.clone()))
+        .await
+        .unwrap();
+    assert_eq!(result["state"], "delivery_unknown");
+    fs::remove_file(root.path().join("developer/session.cookie")).unwrap();
+    assert_eq!(
+        service
+            .call("create_app_group", &args)
+            .await
+            .unwrap_err()
+            .to_string(),
+        "developer_target_delivery_unknown"
+    );
+    mutation.assert_calls(1);
+}
+
+#[tokio::test]
+async fn shared_fallback_requires_configured_reviewer_and_rejects_secret_echo() {
+    let server = MockServer::start();
+    let request = server.mock(|when, then| {
+        when.path("/services-account/QH65B2/account/listTeams.action");
+        then.header("content-type", "application/json").json_body(
+            json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ","name":"asc-private-sentinel"}]}),
+        );
+    });
+    let root = tempfile::tempdir().unwrap();
+    let mut service = shared_server(&server, root.path());
+    let reviewer = service.reviewer.take();
+    let status = service
+        .call("get_developer_connection_status", &json!({}))
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "authentication_required");
+    request.assert_calls(0);
+    service.reviewer = reviewer;
+    let status = service
+        .call("get_developer_connection_status", &json!({}))
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "access_unverified");
+    assert!(!status.to_string().contains("asc-private-sentinel"));
+    request.assert_calls(1);
 }
 
 #[tokio::test]

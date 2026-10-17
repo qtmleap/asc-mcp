@@ -112,9 +112,9 @@ start. Browser clients also require explicitly configured allowed origins.
 
 ## Verify
 
-For the separately gated App Group tools, use the interactive
-[`developer-login.sh` helper](developer-portal.md#docker), not the reviewer
-renewal helper. On both macOS and Linux it publishes to the service's shared
+The opt-in App Group tools can reuse the configured reviewer session on the
+existing mounts. For an optional dedicated account, use the interactive
+[`developer-login.sh` helper](developer-portal.md#docker). On both macOS and Linux it publishes to the service's shared
 Developer state under `/state`. It does not enroll Keychain credentials or
 start/restart the server. Existing raw `runtime.env` and `/state` mounts supply
 the configuration; no new credential mount is needed.

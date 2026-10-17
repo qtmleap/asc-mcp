@@ -65,7 +65,7 @@ impl PortalCookie {
         })
     }
 
-    fn applies(&self, target: &Url) -> bool {
+    pub(super) fn applies(&self, target: &Url) -> bool {
         let host = target.host_str().unwrap_or_default();
         let domain = if self.host_only {
             host == self.domain
@@ -166,7 +166,7 @@ pub(super) fn rotate(
     Ok(())
 }
 
-fn response_cookie(
+pub(super) fn response_cookie(
     raw: &reqwest::header::HeaderValue,
     target: &Url,
 ) -> Result<(PortalCookie, bool)> {
