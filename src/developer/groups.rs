@@ -331,6 +331,7 @@ impl DeveloperPortal {
                         ),
                         ("pageSize".into(), "100".into()),
                         ("pageNumber".into(), page.to_string()),
+                        ("sort".into(), "name=asc".into()),
                     ],
                 )
                 .await?;

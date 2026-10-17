@@ -27,8 +27,146 @@ fn portal(server: &MockServer, root: &std::path::Path) -> DeveloperPortal {
     DeveloperPortal::for_test(&server.base_url(), root, &root.join("session.cookie")).unwrap()
 }
 
+#[tokio::test]
+async fn developer_empty_form_sends_user_agent_and_content_length() {
+    let server = MockServer::start();
+    let request = server.mock(|when, then| {
+        when.method(POST)
+            .path("/services-account/QH65B2/account/listTeams.action")
+            .header("content-length", "0")
+            .header("user-agent", concat!("asc-mcp/", env!("CARGO_PKG_VERSION")));
+        then.header("content-type", "application/json")
+            .json_body(json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}));
+    });
+    let root = tempfile::tempdir().unwrap();
+    let client = portal(&server, root.path());
+    client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap();
+    request.assert_calls(1);
+}
+
 fn shared_server(server: &MockServer, root: &std::path::Path) -> crate::protocol::Server {
     shared_service(&server.base_url(), root)
+}
+
+#[tokio::test]
+async fn developer_http_errors_report_status_without_response_secrets() {
+    let server = MockServer::start();
+    let request = server.mock(|when, then| {
+        when.method(POST)
+            .path("/services-account/QH65B2/account/listTeams.action");
+        then.status(403).body("private-response-sentinel");
+    });
+    let root = tempfile::tempdir().unwrap();
+    let client = portal(&server, root.path());
+    let error = client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap_err();
+    assert_eq!(error.to_string(), "developer_http_failed:403");
+    request.assert_calls(1);
+}
+
+#[tokio::test]
+async fn developer_decodes_gzip_and_bounds_decompressed_responses() {
+    use std::io::Write;
+
+    for size in [None, Some(MAX_RESPONSE_BYTES), Some(MAX_RESPONSE_BYTES + 1)] {
+        let server = MockServer::start();
+        let mut body = json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}).to_string();
+        if let Some(size) = size {
+            body.push_str(&" ".repeat(size - body.len()));
+        }
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(body.as_bytes()).unwrap();
+        let compressed = encoder.finish().unwrap();
+        let request = server.mock(|when, then| {
+            when.method(POST)
+                .path("/services-account/QH65B2/account/listTeams.action");
+            then.header("content-type", "application/json")
+                .header("content-encoding", "gzip")
+                .body(compressed.clone());
+        });
+        let root = tempfile::tempdir().unwrap();
+        let result = portal(&server, root.path())
+            .publish_login("ABCDEFGHIJ", vec![seed()])
+            .await;
+        if size.is_some_and(|size| size > MAX_RESPONSE_BYTES) {
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "developer_response_too_large"
+            );
+        } else {
+            result.unwrap();
+        }
+        request.assert_calls(1);
+    }
+}
+
+#[tokio::test]
+async fn developer_rejects_malformed_or_unsupported_response_encoding() {
+    for encoding in ["gzip", "br", "gzip, gzip", ""] {
+        let server = MockServer::start();
+        let request = server.mock(|when, then| {
+            when.method(POST)
+                .path("/services-account/QH65B2/account/listTeams.action");
+            then.header("content-type", "application/json")
+                .header("content-encoding", encoding)
+                .body("private-response-sentinel");
+        });
+        let root = tempfile::tempdir().unwrap();
+        let error = portal(&server, root.path())
+            .publish_login("ABCDEFGHIJ", vec![seed()])
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "developer_response_encoding_invalid");
+        request.assert_calls(1);
+    }
+}
+
+#[test]
+fn developer_response_encoding_validation_is_strict() {
+    use reqwest::header::{CONTENT_ENCODING, HeaderMap, HeaderValue};
+
+    let compressed = hex::decode("1f8b0800000000000003ab562a4a2d2ecd2971ce4f4955b232d0512a494dcc2d56b28aae06b33c5394ac941c9d9c5d5cdddc3d3cbd946a636b017e5883a832000000").unwrap();
+    let decoded = br#"{"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}"#;
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_ENCODING, HeaderValue::from_static(" GZip "));
+    assert_eq!(
+        decode_response(&headers, compressed.clone()).unwrap(),
+        decoded
+    );
+    let truncated = compressed[..compressed.len() - 1].to_vec();
+    let mut trailing = compressed.clone();
+    trailing.extend_from_slice(b"private-trailing-sentinel");
+    for malformed in [truncated, trailing] {
+        assert_eq!(
+            decode_response(&headers, malformed)
+                .unwrap_err()
+                .to_string(),
+            "developer_response_encoding_invalid"
+        );
+    }
+    headers.append(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+    assert_eq!(
+        decode_response(&headers, compressed)
+            .unwrap_err()
+            .to_string(),
+        "developer_response_encoding_invalid"
+    );
+    headers.insert(CONTENT_ENCODING, HeaderValue::from_static("identity"));
+    assert_eq!(
+        decode_response(&headers, decoded.to_vec()).unwrap(),
+        decoded
+    );
+    assert_eq!(
+        decode_response(&headers, vec![0; MAX_RESPONSE_BYTES + 1])
+            .unwrap_err()
+            .to_string(),
+        "developer_response_too_large"
+    );
 }
 
 fn shared_service(endpoint: &str, root: &std::path::Path) -> crate::protocol::Server {
@@ -563,7 +701,7 @@ fn developer_private_state_is_bounded_and_symlink_safe() {
 
 fn groups(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
-        when.method(POST).path("/services-account/QH65B2/account/ios/identifiers/listApplicationGroups.action");
+        when.method(POST).path("/services-account/QH65B2/account/ios/identifiers/listApplicationGroups.action").form_urlencoded_tuple("sort", "name=asc");
         then.header("csrf", "synthetic-csrf").header("csrf_ts", "12345")
             .header("content-type","application/json").json_body(json!({"resultCode":0,"applicationGroupList":[{"identifier":"group.example.old","applicationGroup":"GROUPOLD1","name":"Old"}],"totalRecords":1}));
     })
@@ -578,7 +716,7 @@ fn detail(server: &MockServer, count: usize) -> httpmock::Mock<'_> {
 
 fn apps(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
-        when.method(POST).path("/services-account/QH65B2/account/ios/identifiers/listAppIds.action");
+        when.method(POST).path("/services-account/QH65B2/account/ios/identifiers/listAppIds.action").form_urlencoded_tuple("sort", "name=asc");
         then.header("content-type","application/json").json_body(json!({"resultCode":0,"appIds":[{"appIdId":"APPID123","identifier":"com.example.app","appIdPlatform":"ios"}],"totalRecords":1}));
     })
 }
