@@ -1,6 +1,7 @@
 //! MCP dispatch shared by stdio and Streamable HTTP transports.
 use crate::{
-    api_tools, catalog, client::ApiClient, developer::DeveloperPortal, reviewer::Reviewer, uploads,
+    api_tools, catalog, client::ApiClient, developer::DeveloperPortal, release, reviewer::Reviewer,
+    uploads,
 };
 use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
@@ -66,6 +67,9 @@ impl Server {
         if let Some(developer) = &self.developer {
             tools.extend(developer.tools());
         }
+        if cfg!(unix) && self.api.is_some() {
+            tools.push(release::tool());
+        }
         tools
     }
     pub async fn call(&self, name: &str, args: &Value) -> Result<Value> {
@@ -103,6 +107,9 @@ impl Server {
             .api
             .as_ref()
             .ok_or_else(|| anyhow!("public API credentials are not configured"))?;
+        if name == release::NAME {
+            return release::call(client, &release::state_root()?, args).await;
+        }
         if let Some(value) = uploads::handle(client, name, args).await? {
             return Ok(value);
         }
