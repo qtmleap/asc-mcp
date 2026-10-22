@@ -1,3 +1,4 @@
+#![cfg(unix)]
 mod release_common;
 use asc_mcp::release;
 use httpmock::MockServer;
@@ -89,13 +90,15 @@ async fn concurrent_confirms_post_once() {
         }));
     }
     let mut created_count = 0;
+    let mut busy_count = 0;
     for task in tasks {
-        if let Ok(value) = task.await.unwrap()
-            && value["status"] == "release_request_created"
-        {
-            created_count += 1;
+        match task.await.unwrap() {
+            Ok(value) if value["status"] == "release_request_created" => created_count += 1,
+            Err(error) if error.to_string() == "release_busy" => busy_count += 1,
+            _ => (),
         }
     }
     assert_eq!(created_count, 1);
+    assert!(busy_count > 0);
     post.assert_calls_async(1).await;
 }

@@ -28,13 +28,13 @@ fn release_tool_is_listed_only_with_api() {
         developer: None,
     };
     let listed = names(&api);
-    assert_eq!(listed.len(), 357);
+    assert_eq!(listed.len(), 356 + usize::from(cfg!(unix)));
     assert_eq!(
         listed
             .iter()
             .filter(|name| *name == "release_app_store_version")
             .count(),
-        1
+        usize::from(cfg!(unix))
     );
 }
 

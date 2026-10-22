@@ -159,8 +159,14 @@ fn unknown(reason: &str) -> Value {
 
 async fn preview(client: &ApiClient, store: &Store, args: Args) -> Result<Value> {
     if let Some(receipt) = store.load()?.filter(|receipt| receipt.attempted) {
-        let body = remote::fetch(client, &args.target.version_id).await?;
-        return recorded(&receipt, Some(remote::observed_state(&body)));
+        return match remote::fetch(client, &args.target.version_id).await {
+            Ok(body) => recorded(&receipt, Some(remote::observed_state(&body))),
+            Err(_) => {
+                let mut observation = recorded(&receipt, None)?;
+                observation["observation_error"] = json!("read_failed");
+                Ok(observation)
+            }
+        };
     }
     let body = remote::fetch(client, &args.target.version_id).await?;
     let observed = remote::validate(&body, &args.target)?;
@@ -212,24 +218,34 @@ async fn confirm(client: &ApiClient, store: &Store, args: Args, token: &str) -> 
     }
     let body = remote::fetch(client, &args.target.version_id).await?;
     remote::validate(&body, &args.target)?;
+    if now() >= receipt.expires_at {
+        bail!("release_token_expired");
+    }
     receipt.attempted = true;
     store.save(&receipt)?;
     let outcome = remote::send(client, &args.target.version_id).await;
     receipt.outcome = Some(outcome.clone());
     let persisted = store.save(&receipt).is_ok();
+    if !persisted {
+        let mut result = unknown("outcome_not_persisted");
+        if let Some(request_id) = outcome.request_id {
+            result["request_id"] = json!(request_id);
+            result["acceptance_observed"] = json!(true);
+        }
+        return Ok(result);
+    }
     match outcome {
         Outcome {
             status,
             request_id: Some(request_id),
             ..
-        } if persisted && status == "release_request_created" => Ok(json!({
+        } if status == "release_request_created" => Ok(json!({
             "status": "release_request_created",
             "request_id": request_id,
             "target": serde_json::to_value(&args.target)?,
             "message": "Apple accepted the release request (HTTP 201). Acceptance is not proof of availability; check App Store Connect.",
         })),
-        Outcome { reason, .. } if persisted => Ok(unknown(reason.as_deref().unwrap_or("unknown"))),
-        _ => Ok(unknown("outcome_not_persisted")),
+        Outcome { reason, .. } => Ok(unknown(reason.as_deref().unwrap_or("unknown"))),
     }
 }
 

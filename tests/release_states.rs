@@ -1,3 +1,4 @@
+#![cfg(unix)]
 mod release_common;
 use asc_mcp::release;
 use httpmock::{Method::GET, MockServer};

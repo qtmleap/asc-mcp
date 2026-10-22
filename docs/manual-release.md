@@ -67,12 +67,16 @@ between them. Avoid concurrent manual changes during confirmation.
   HTTP 201 release-request resource. It does not mean distribution is complete.
 - `outcome_unknown` means the POST response could not establish acceptance.
   HTTP errors, transport failures and malformed success bodies are handled
-  conservatively. No automatic write retry occurs.
+  conservatively. No automatic write retry occurs. If Apple returned a valid
+  acceptance but saving its outcome failed, `acceptance_observed: true` and
+  `request_id` retain that evidence while the durable attempt still blocks replay.
 - Once an attempt is recorded, subsequent confirmations for that version are
   blocked, including after process cancellation or restart. This also applies
   to successful requests and failed HTTP responses.
 - A dry run after an attempt performs a read-only inspection and returns
   `release_attempt_recorded`, the observed version state and no new token.
+  When the read fails, it still reports the attempt guard with
+  `observation_error: read_failed`.
 
 Use the ordinary version-read tools or App Store Connect to check processing and
 distribution. Do not retry an uncertain release or delete its guard record to
@@ -85,6 +89,8 @@ Receipts and per-version locks default to
 `$HOME/Library/Application Support/ASC MCP/Manual Releases`. Set
 `ASC_RELEASE_STATE_ROOT` to override the directory. The directory must be private,
 writable and persistent. Private filesystem operations reject symlinked paths.
+Use a dedicated directory: the private-state helper sets its permissions to 0700;
+do not point the override at a shared directory or your home directory itself.
 
 The supplied Docker image sets `HOME=/state`, and Compose persists that mount.
 All processes using this tool for the same Apple account must share the same
