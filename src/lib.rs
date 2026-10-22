@@ -4,6 +4,7 @@ pub mod client;
 pub mod developer;
 pub mod http;
 pub mod protocol;
+pub mod release;
 pub mod renewal;
 pub mod reviewer;
 pub mod uploads;

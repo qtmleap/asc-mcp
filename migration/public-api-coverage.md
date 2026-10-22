@@ -6,6 +6,11 @@ The runtime catalogue adds fields already accepted by Go but missing from its
 schema, and the subscription-offer fields described below. Original names remain
 available; runtime validation reports legacy arguments which had no implementation.
 
+`release_app_store_version` is a native addition outside the original 356-tool
+catalogue and request fixtures. It is exposed with configured API credentials on
+Unix hosts and uses a separate preview, fresh target verification and durable
+attempt guard. See [manual release](../docs/manual-release.md).
+
 ## Offline compatibility evidence
 
 `migration/export.sh`, run in a separate checkout of the recorded Go revision, installs a temporary, build-tagged capture client and runs

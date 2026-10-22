@@ -210,6 +210,7 @@ stack reach the service at `http://asc-mcp:8080/mcp`.
 | Area | Needs | Notes |
 | --- | --- | --- |
 | 356 official API tools: metadata, versions, review submission, screenshots, TestFlight, provisioning, commerce, Game Center, reports, Xcode Cloud | Team Key with a role that permits the endpoint | Same tool names as upstream; see compatibility below |
+| Manual iOS release: preview and confirm publication of an approved version | Team Key; macOS or Linux; persistent writable state | Additional `release_app_store_version` tool when API credentials are configured; [usage and recovery](docs/manual-release.md) |
 | 14 reviewer tools: list apps, read versions/submissions/rejections, read and monitor Apple messages, send a reply, confirm or recover it | Reviewer session | Reviewer-only mode needs no API key |
 
 Not implemented: building/archiving/signing an Xcode project (an API `.p8` is not

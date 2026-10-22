@@ -7,18 +7,18 @@ use std::{path::PathBuf, time::Duration};
 
 mod cookies;
 #[cfg(unix)]
-mod fs_safe;
+pub(crate) mod fs_safe;
 #[cfg(not(unix))]
-mod fs_safe {
+pub(crate) mod fs_safe {
     use anyhow::{Result, bail};
     use std::{fs::File, path::Path};
-    pub(super) fn private_read(_: &Path, _: usize) -> Result<Vec<u8>> {
+    pub(crate) fn private_read(_: &Path, _: usize) -> Result<Vec<u8>> {
         bail!("developer_platform_unsupported")
     }
-    pub(super) fn private_lock(_: &Path, _: &str) -> Result<File> {
+    pub(crate) fn private_lock(_: &Path, _: &str) -> Result<File> {
         bail!("developer_platform_unsupported")
     }
-    pub(super) fn atomic_write(_: &Path, _: &[u8]) -> Result<()> {
+    pub(crate) fn atomic_write(_: &Path, _: &[u8]) -> Result<()> {
         bail!("developer_platform_unsupported")
     }
 }
