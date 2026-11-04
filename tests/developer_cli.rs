@@ -51,7 +51,7 @@ fn developer_only_cli_catalogue_and_validate() {
         String::from_utf8_lossy(&result.stderr)
     );
     let tools: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(tools.as_array().unwrap().len(), 6);
+    assert_eq!(tools.as_array().unwrap().len(), 7);
     assert!(
         tools
             .as_array()

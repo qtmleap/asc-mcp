@@ -109,9 +109,11 @@ impl Receipt {
     }
 
     pub fn summary(&self) -> serde_json::Value {
-        serde_json::json!({"operation_id":self.operation_id,"state":self.state,"team_id":self.plan.team,"identifier":self.plan.identifier,
+        let mut output = serde_json::json!({"operation_id":self.operation_id,"state":self.state,"team_id":self.plan.team,"identifier":self.plan.identifier,
             "bundle_id":self.plan.bundle_id,"observation":self.observation,"causation_verified":self.state == Delivery::Verified,
-            "write_blocked":matches!(self.state,Delivery::Attempting|Delivery::Unknown)})
+            "write_blocked":matches!(self.state,Delivery::Attempting|Delivery::Unknown)});
+        self.plan.recovery_output(&mut output);
+        output
     }
 }
 
@@ -146,11 +148,13 @@ impl Receipts {
                 changed = true;
             }
         }
+        store.validate_recoveries()?;
         let stamp = chrono::Utc::now().timestamp();
         let before = store.records.len();
         store.records.retain(|record| {
             !(record.state == Delivery::Prepared && record.expires_at <= stamp
-                || matches!(record.state, Delivery::Verified | Delivery::Rejected)
+                || record.plan.recovery_of.is_none()
+                    && matches!(record.state, Delivery::Verified | Delivery::Rejected)
                     && record.created_at < stamp - 30 * 86400)
         });
         if changed || before != store.records.len() {
@@ -177,6 +181,7 @@ impl Receipts {
         if self.records.len() > 2048 || self.records.iter().any(|record| !record.valid()) {
             bail!("developer_receipt_invalid");
         }
+        self.validate_recoveries()?;
         let bytes =
             serde_json::to_vec(self).map_err(|_| anyhow::anyhow!("developer_receipt_invalid"))?;
         let path = portal.root.join("receipts.json");
@@ -188,11 +193,91 @@ impl Receipts {
     }
 
     pub fn check_conflict(&self, plan: &Plan) -> Result<()> {
+        let exempt = if plan.recovery_of.is_some() {
+            Some(self.recovery_parent(plan)?.operation_id.as_str())
+        } else {
+            None
+        };
         if self.records.iter().any(|record| {
             matches!(record.state, Delivery::Attempting | Delivery::Unknown)
                 && record.plan.key() == plan.key()
+                && Some(record.operation_id.as_str()) != exempt
         }) {
             bail!("developer_target_delivery_unknown");
+        }
+        if plan.recovery_of.is_some()
+            && self.records.iter().any(|record| {
+                record.plan.recovery_of == plan.recovery_of && record.state != Delivery::Prepared
+            })
+        {
+            bail!("developer_recovery_consumed");
+        }
+        Ok(())
+    }
+
+    fn recovery_parent(&self, plan: &Plan) -> Result<&Receipt> {
+        let parent = self
+            .records
+            .iter()
+            .find(|record| Some(&record.operation_id) == plan.recovery_of.as_ref())
+            .ok_or_else(|| anyhow::anyhow!("developer_recovery_reference_invalid"))?;
+        if plan.kind != Kind::Associate
+            || parent.state != Delivery::Unknown
+            || parent.plan.kind != Kind::Associate
+            || parent.plan.recovery_of.is_some()
+            || parent.plan.team != plan.team
+            || parent.plan.identifier != plan.identifier
+            || parent.plan.bundle_id != plan.bundle_id
+        {
+            bail!("developer_recovery_reference_invalid");
+        }
+        Ok(parent)
+    }
+
+    fn same_recovery_identity(plan: &Plan, original: &Plan) -> bool {
+        plan.team == original.team
+            && plan.identifier == original.identifier
+            && plan.bundle_id == original.bundle_id
+            && plan.app_id == original.app_id
+            && plan.group_id == original.group_id
+            && plan.kind == Kind::Associate
+    }
+
+    pub fn validate_recovery_plan(&self, plan: &Plan, no_op: bool) -> Result<()> {
+        if plan.recovery_of.is_none() {
+            return Ok(());
+        }
+        let original = &self.recovery_parent(plan)?.plan;
+        let baseline = if no_op {
+            &original.expected
+        } else {
+            &original.baseline
+        };
+        if !Self::same_recovery_identity(plan, original)
+            || &plan.baseline != baseline
+            || plan.expected != original.expected
+        {
+            bail!("developer_recovery_state_changed");
+        }
+        Ok(())
+    }
+
+    fn validate_recoveries(&self) -> Result<()> {
+        let mut parents = std::collections::BTreeSet::new();
+        for record in &self.records {
+            if let Some(reference) = &record.plan.recovery_of {
+                let original = self
+                    .recovery_parent(&record.plan)
+                    .map_err(|_| anyhow::anyhow!("developer_receipt_invalid"))?;
+                if reference == &record.operation_id
+                    || !parents.insert(reference)
+                    || !Self::same_recovery_identity(&record.plan, &original.plan)
+                    || record.plan.baseline != original.plan.baseline
+                    || record.plan.expected != original.plan.expected
+                {
+                    bail!("developer_receipt_invalid");
+                }
+            }
         }
         Ok(())
     }
@@ -203,6 +288,14 @@ impl Receipts {
         plan: Plan,
     ) -> Result<serde_json::Value> {
         self.check_conflict(&plan)?;
+        if plan.recovery_of.is_some()
+            && self
+                .records
+                .iter()
+                .any(|record| record.plan.recovery_of == plan.recovery_of)
+        {
+            bail!("developer_recovery_already_prepared");
+        }
         if self.records.len() >= 2048 {
             bail!("developer_receipt_capacity");
         }
@@ -224,10 +317,16 @@ impl Receipts {
             expires_at: stamp + 900,
             observation: "prepared".into(),
         };
-        let output = serde_json::json!({"state":"prepared","operation_id":receipt.operation_id,"confirmation_token":token,
+        let mut output = serde_json::json!({"state":"prepared","operation_id":receipt.operation_id,"confirmation_token":token,
             "expires_at":receipt.expires_at,"team_id":receipt.plan.team,"identifier":receipt.plan.identifier,"name":receipt.plan.name,
             "bundle_id":receipt.plan.bundle_id,"existing_group_ids":receipt.plan.baseline,"proposed_group_ids":receipt.plan.expected,
             "warning":if receipt.plan.kind == Kind::Associate { "Private API replaces associations; an external Portal or Xcode writer can race between verification and replacement. Confirm the complete proposed set." } else { "Experimental undocumented Developer Portal write; confirmation token does not attest human approval." }});
+        receipt.plan.recovery_output(&mut output);
+        if receipt.plan.recovery_of.is_some() {
+            output["warning"] = serde_json::json!(
+                "Explicit operator repair, not an automatic retry. The original delivery remains unknown and ordinary writes remain blocked. Equal planned sets do not prove identical server effects of the original malformed request. Only observed state is verified; external Portal/Xcode writers can race. One confirmed repair attempt is permitted. Repair-aware binaries are required after preparation; never delete receipts or restore an old ledger."
+            );
+        }
         self.records.push(receipt);
         self.save(portal)?;
         Ok(output)
@@ -249,6 +348,7 @@ impl Receipts {
             || record.plan.identifier != args.plan.identifier
             || record.plan.name != args.plan.name
             || record.plan.bundle_id != args.plan.bundle_id
+            || record.plan.recovery_of != args.plan.recovery_of
         {
             bail!("developer_confirmation_invalid");
         }

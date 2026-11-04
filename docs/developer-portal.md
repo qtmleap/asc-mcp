@@ -1,6 +1,6 @@
 # Experimental Developer Portal App Groups
 
-These six opt-in tools use the Developer Portal web service. App Groups are not
+These seven opt-in tools use the Developer Portal web service. App Groups are not
 an App Store Connect public API resource. A Team API key cannot authorize them.
 Without a dedicated Developer session, the MCP server can reuse eligible
 credentials from its configured reviewer's existing Apple ID session, then
@@ -50,7 +50,7 @@ The selected team is pinned in the dedicated session and checked against live
 membership before an operation. Switching team requires explicit fresh login.
 
 The tools remain disabled by default; `developer-login` itself does not enable
-them. With only Developer tools enabled, discovery exposes those six tools and
+them. With only Developer tools enabled, discovery exposes those seven tools and
 `validate` accepts that local configuration. `validate` does not test live login.
 The public API retains its API-key authentication; reviewer configuration stays
 unchanged. A second login is not intrinsically required by this feature. Live
@@ -153,6 +153,39 @@ reviewer sources retain their existing read-only credential mount.
 | `create_app_group` | Prepare and explicitly confirm one group registration. |
 | `associate_app_group` | Prepare and explicitly confirm an additive association. |
 | `get_app_group_write_status` | Inspect a stored operation and read current desired state, without resending. |
+| `repair_app_group_association` | Prepare one separately authorized repair of an unknown association, without clearing its original receipt or normal-write block. |
+
+### Explicit operator-confirmed association repair
+
+Ordinary tools never resend an unknown request or release its target block.
+If an operator explicitly authorizes a repair, use `repair_app_group_association`
+with the exact `team_id`, `bundle_id`, `identifier` and the original operation UUID
+as `recovery_of`. It uses the existing verified authentication and does not need
+a browser login. Dry-run and fresh confirmation work as described below.
+
+Only an unknown original association without a recovery parent is eligible.
+Complete current associations must equal the original baseline, and the proposed
+set and resolved resource IDs must equal the original plan exactly. Changed or
+partial state, another unknown on the same target, and recovery chains are denied.
+An exactly observed desired set is a read-only no-op, never proof of old causation.
+
+There is at most one live repair plan per original and one confirmed repair
+attempt. Expired never-dispatched plans may be removed, but terminal repair
+receipts are retained permanently. A verified repair still reports
+`original_delivery_unknown: true` and `normal_writes_blocked: true`; the original
+receipt is not resolved or removed. A lost/unknown repair cannot be tried again.
+The single confirmed-operation limit is deliberately conservative: even a
+pre-dispatch read/validation failure consumes that confirmation and repair slot.
+It is not permission to retry, edit the ledger or continue the old approval.
+
+Identical planned sets cannot prove identical server-side effects of a malformed
+original request. Readback proves observed state, not permanent convergence;
+another Portal/Xcode writer may still race. Do not use this route as an automatic
+timeout retry or continue an old approval for a different target or set.
+
+After the first repair plan is prepared, rollback must use a repair-aware binary.
+Older binaries reject the extended ledger and fail closed. Never delete receipts,
+restore a pre-repair ledger or switch state roots to work around that failure.
 
 Every target operation requires an explicit `team_id`. Group identifiers start
 with `group.`; wildcard and ambiguous identifiers are rejected. Names use the
