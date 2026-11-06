@@ -312,7 +312,7 @@ mod tests {
                 .unwrap(),
             ),
         };
-        assert_eq!(server.tools().len(), 6);
+        assert_eq!(server.tools().len(), 7);
         for version in VERSIONS {
             let session = Session::default();
             session.initialized.store(true, Ordering::Release);

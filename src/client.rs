@@ -169,7 +169,10 @@ impl ApiClient {
                 .request(method.clone(), url.clone())
                 .bearer_auth(self.token()?)
                 .header("Accept", "application/json")
-                .header("User-Agent", "asc-mcp-rust/0.2.0")
+                .header(
+                    "User-Agent",
+                    concat!("asc-mcp-rust/", env!("CARGO_PKG_VERSION")),
+                )
                 .query(&query);
             if let Some(value) = &body {
                 request = request.json(value)

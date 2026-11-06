@@ -3,6 +3,9 @@ use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 use std::fs;
 
+#[path = "association_repair_tests.rs"]
+mod codex_repair_tests;
+
 fn seed() -> PortalCookie {
     PortalCookie {
         name: "myacinfo".into(),
@@ -952,6 +955,12 @@ struct StatefulFixture {
 struct FixtureState {
     created: bool,
     associated: bool,
+    empty_baseline: bool,
+    ignore_association: bool,
+    extra_association: bool,
+    extra_detail_on: Option<usize>,
+    bundle_override: Option<String>,
+    app_override: Option<String>,
     readback_rejection: bool,
     mutation_count: usize,
     captured: Vec<(String, String, bool, bool)>,
@@ -963,6 +972,30 @@ struct FixtureState {
     replace_on_mutation: Option<(std::path::PathBuf, Vec<u8>)>,
     block_overlay_on_mutation: Option<std::path::PathBuf>,
     mutation_cookie: Option<String>,
+    detail_gate: Option<(
+        usize,
+        std::sync::Arc<tokio::sync::Notify>,
+        std::sync::Arc<tokio::sync::Semaphore>,
+    )>,
+}
+
+/// Holds one `getAppIdDetail` response until released; releases on drop so a
+/// failing test never leaves a handler parked.
+struct DetailGate {
+    arrived: std::sync::Arc<tokio::sync::Notify>,
+    release: std::sync::Arc<tokio::sync::Semaphore>,
+}
+
+impl DetailGate {
+    fn release(&self) {
+        self.release.add_permits(16);
+    }
+}
+
+impl Drop for DetailGate {
+    fn drop(&mut self) {
+        self.release();
+    }
 }
 
 impl Drop for StatefulFixture {
@@ -983,29 +1016,56 @@ impl StatefulFixture {
                 let authorization = request.headers().contains_key("authorization");
                 let csrf = request.headers().get("csrf").is_some_and(|value| value == "fixture-csrf") && request.headers().get("csrf_ts").is_some_and(|value| value == "123");
                 let bytes = axum::body::to_bytes(request.into_body(), 65536).await.unwrap();
+                let gate = {
+                    let mut state = shared.lock().unwrap();
+                    if path.ends_with("getAppIdDetail.action")
+                        && state.detail_gate.as_ref().is_some_and(|(number, ..)| *number == state.detail_count + 1)
+                    { state.detail_gate.take() } else { None }
+                };
+                if let Some((_, arrived, release)) = gate {
+                    arrived.notify_one();
+                    release.acquire().await.unwrap().forget();
+                }
                 let form = String::from_utf8(bytes.to_vec()).unwrap();
+                let association_values: Vec<_> = url::form_urlencoded::parse(form.as_bytes())
+                    .filter(|(key, _)| key == "applicationGroups")
+                    .map(|(_, value)| value.into_owned())
+                    .collect();
+                let bracketed = url::form_urlencoded::parse(form.as_bytes()).any(|(key, _)| key == "applicationGroups[]");
                 let mut state = shared.lock().unwrap();
+                let expected_values = if state.empty_baseline { vec!["GROUPNEW1"] } else { vec!["GROUPNEW1", "GROUPOLD1"] };
+                let valid_association_form = association_values == expected_values && !bracketed;
                 state.captured.push((path.clone(),form,authorization,csrf));
                 if path.ends_with("getAppIdDetail.action") {
                     state.detail_count += 1;
                     if state.change_detail_on == Some(state.detail_count) { state.associated = true; }
+                    if state.extra_detail_on == Some(state.detail_count) { state.extra_association = true; }
                     if let Some((count,path,bytes)) = &state.replace_on_detail
                         && state.detail_count == *count { fs_safe::atomic_write(path,bytes).unwrap(); }
                 }
                 let old = json!({"identifier":"group.example.old","applicationGroup":"GROUPOLD1","name":state.old_name.as_deref().unwrap_or("Old")});
                 let new = json!({"identifier":"group.example.new","applicationGroup":"GROUPNEW1","name":"New"});
-                let detail = |associated| json!({"appIdId":"APPID123","identifier":"com.example.app","appIdPlatform":"ios","features":{"APG3427HIY":true},"enabledFeatures":["APG3427HIY"],"associatedApplicationGroupsCount":if associated {2} else {1},"associatedApplicationGroups":if associated {vec![old.clone(),new.clone()]} else {vec![old.clone()]}});
+                let detail = |associated| {
+                    let mut groups = if state.empty_baseline { vec![] } else { vec![old.clone()] };
+                    if associated { groups.push(new.clone()); }
+                    if state.extra_association { groups.push(json!({"identifier":"group.example.extra","applicationGroup":"GROUPEXTRA","name":"Extra"})); }
+                    json!({"appIdId":state.app_override.as_deref().unwrap_or("APPID123"),"identifier":state.bundle_override.as_deref().unwrap_or("com.example.app"),"appIdPlatform":"ios","features":{"APG3427HIY":true},"enabledFeatures":["APG3427HIY"],"associatedApplicationGroupsCount":groups.len(),"associatedApplicationGroups":groups})
+                };
                 let body = if path.ends_with("listTeams.action") { json!({"resultCode":0,"teams":[{"teamId":"ABCDEFGHIJ"}]}) }
                 else if path.ends_with("listApplicationGroups.action") {
                     if state.created && state.readback_rejection { json!({"resultCode":35}) }
                     else { let groups = if state.created {vec![old.clone(),new.clone()]} else {vec![old.clone()]}; json!({"resultCode":0,"totalRecords":groups.len(),"applicationGroupList":groups}) }
-                } else if path.ends_with("listAppIds.action") { json!({"resultCode":0,"totalRecords":1,"appIds":[{"appIdId":"APPID123","identifier":"com.example.app","appIdPlatform":"ios"}]}) }
+                } else if path.ends_with("listAppIds.action") { json!({"resultCode":0,"totalRecords":1,"appIds":[{"appIdId":state.app_override.as_deref().unwrap_or("APPID123"),"identifier":state.bundle_override.as_deref().unwrap_or("com.example.app"),"appIdPlatform":"ios"}]}) }
                 else if path.ends_with("getAppIdDetail.action") {
                     if state.fail_detail_on == Some(state.detail_count) { json!({"resultCode":35}) }
                     else { json!({"resultCode":0,"appId":detail(state.associated)}) }
                 }
                 else if path.ends_with("addApplicationGroup.action") { state.mutation_count += 1; state.created = true; json!({"resultCode":0,"applicationGroup":new}) }
-                else if path.ends_with("assignApplicationGroupToAppId.action") { state.mutation_count += 1; state.associated = true; json!({"resultCode":0,"appId":detail(true)}) }
+                else if path.ends_with("assignApplicationGroupToAppId.action") {
+                    state.mutation_count += 1;
+                    if valid_association_form { state.associated = !state.ignore_association; json!({"resultCode":0}) }
+                    else { json!({"resultCode":35}) }
+                }
                 else { json!({"resultCode":404}) };
                 let token = if path.ends_with("listApplicationGroups.action") { "fixture-csrf" } else { "unrelated-token" };
                 let mutation = path.ends_with("addApplicationGroup.action") || path.ends_with("assignApplicationGroupToAppId.action");
@@ -1036,6 +1096,25 @@ impl StatefulFixture {
     }
     fn client(&self, root: &std::path::Path) -> DeveloperPortal {
         DeveloperPortal::for_test(&self.endpoint, root, &root.join("session.cookie")).unwrap()
+    }
+    /// Parks the next `getAppIdDetail` request; `arrived` fires once it is in flight.
+    fn gate_next_detail(&self) -> DetailGate {
+        let gate = DetailGate {
+            arrived: std::sync::Arc::new(tokio::sync::Notify::new()),
+            release: std::sync::Arc::new(tokio::sync::Semaphore::new(0)),
+        };
+        let mut state = self.state.lock().unwrap();
+        let number = state.detail_count + 1;
+        state.detail_gate = Some((number, gate.arrived.clone(), gate.release.clone()));
+        gate
+    }
+    fn count_posts(&self, suffix: &str) -> usize {
+        let state = self.state.lock().unwrap();
+        state
+            .captured
+            .iter()
+            .filter(|(path, ..)| path.ends_with(suffix))
+            .count()
     }
 }
 
@@ -1313,10 +1392,13 @@ async fn developer_association_posts_complete_repeated_union() {
         .unwrap()
         .1;
     let values: Vec<_> = url::form_urlencoded::parse(sent.as_bytes())
-        .filter(|(key, _)| key == "applicationGroups[]")
+        .filter(|(key, _)| key == "applicationGroups")
         .map(|(_, value)| value.into_owned())
         .collect();
     assert_eq!(values, vec!["GROUPNEW1", "GROUPOLD1"]);
+    assert!(
+        !url::form_urlencoded::parse(sent.as_bytes()).any(|(key, _)| key == "applicationGroups[]")
+    );
     assert!(
         state
             .captured
@@ -1353,12 +1435,12 @@ async fn developer_strict_schemas_and_validation_precede_session_read() {
     let root = tempfile::tempdir().unwrap();
     let client = portal(&server, root.path());
     let tools = client.tools();
-    assert_eq!(tools.len(), 6);
+    assert_eq!(tools.len(), 7);
     for tool in &tools {
         assert_eq!(tool["inputSchema"]["additionalProperties"], false);
         if matches!(
             tool["name"].as_str(),
-            Some("create_app_group" | "associate_app_group")
+            Some("create_app_group" | "associate_app_group" | "repair_app_group_association")
         ) {
             assert_eq!(
                 tool["inputSchema"]["properties"]["dry_run"]["default"],

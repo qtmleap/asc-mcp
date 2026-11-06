@@ -105,6 +105,8 @@ pub(super) struct Plan {
     pub generation: String,
     pub baseline: Vec<String>,
     pub expected: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_of: Option<String>,
 }
 
 impl Plan {
@@ -130,6 +132,10 @@ impl Plan {
                 && values.iter().all(|value| resource(value).is_ok())
         };
         validate_team(&self.team).is_ok()
+            && self
+                .recovery_of
+                .as_ref()
+                .is_none_or(|value| uuid::Uuid::parse_str(value).is_ok())
             && identifier(&self.identifier, true).is_ok()
             && self.generation.len() == 64
             && self.generation.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -137,7 +143,8 @@ impl Plan {
             && ordered(&self.expected)
             && match self.kind {
                 Kind::Create => {
-                    self.name.as_ref().is_some_and(|value| name(value).is_ok())
+                    self.recovery_of.is_none()
+                        && self.name.as_ref().is_some_and(|value| name(value).is_ok())
                         && self.bundle_id.is_none()
                         && self.app_id.is_none()
                         && self.group_id.is_none()
@@ -164,6 +171,14 @@ impl Plan {
                         && self.expected.len() <= self.baseline.len() + 1
                 }
             }
+    }
+
+    pub fn recovery_output(&self, output: &mut Value) {
+        if let Some(original) = &self.recovery_of {
+            output["recovery_of"] = json!(original);
+            output["original_delivery_unknown"] = json!(true);
+            output["normal_writes_blocked"] = json!(true);
+        }
     }
 }
 
@@ -298,11 +313,25 @@ pub(super) fn write_args(args: &Value, kind: Kind) -> Result<WriteArgs> {
             generation: String::new(),
             baseline: vec![],
             expected: vec![],
+            recovery_of: None,
         },
         dry_run,
         operation_id,
         token,
     })
+}
+
+pub(super) fn repair_args(args: &Value) -> Result<WriteArgs> {
+    let mut original = args.clone();
+    let reference = original
+        .as_object_mut()
+        .and_then(|fields| fields.remove("recovery_of"))
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .filter(|value| uuid::Uuid::parse_str(value).is_ok())
+        .ok_or_else(|| anyhow::anyhow!("developer_recovery_reference_required"))?;
+    let mut write = write_args(&original, Kind::Associate)?;
+    write.plan.recovery_of = Some(reference);
+    Ok(write)
 }
 
 impl DeveloperPortal {
@@ -544,7 +573,7 @@ impl DeveloperPortal {
         transaction: &mut Transaction,
         plan: &Plan,
         started: std::time::Instant,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         if plan.kind == Kind::Associate {
             let bundle = plan
                 .bundle_id
@@ -554,11 +583,16 @@ impl DeveloperPortal {
                 .app_id
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("developer_plan_invalid"))?;
-            if self.associations(transaction, bundle, app).await? != plan.baseline {
+            let current = self.associations(transaction, bundle, app).await?;
+            if current != plan.baseline {
+                if plan.recovery_of.is_some() && current == plan.expected {
+                    return Ok(true);
+                }
                 bail!("developer_baseline_changed");
             }
         }
-        mutation_ready(transaction, plan, started)
+        mutation_ready(transaction, plan, started)?;
+        Ok(false)
     }
 
     pub(super) async fn mutate(
@@ -624,7 +658,7 @@ impl DeveloperPortal {
             fields.extend(
                 plan.expected
                     .iter()
-                    .map(|value| ("applicationGroups[]".into(), value.clone())),
+                    .map(|value| ("applicationGroups".into(), value.clone())),
             );
             let body = self
                 .request_checked(transaction, Endpoint::Associate, fields, rejected)

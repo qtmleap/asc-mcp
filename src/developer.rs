@@ -428,9 +428,16 @@ impl DeveloperPortal {
                 true,
                 false,
             ),
+            (
+                "repair_app_group_association",
+                json!({"team_id":team,"identifier":identity,"bundle_id":identity,"recovery_of":operation,"dry_run":{"type":"boolean","default":true},"operation_id":operation,"confirmation_token":string("^[a-fA-F0-9]{64}$")}),
+                vec!["team_id", "identifier", "bundle_id", "recovery_of"],
+                false,
+                true,
+            ),
         ];
         descriptors.into_iter().map(|(name,properties,required,read,destructive)| json!({"name":name,
-            "description":"Experimental undocumented Developer Portal operation. Reuses eligible credentials from the configured reviewer when no dedicated Developer session exists; live Developer access and explicit Team verification remain required. Writes default to a stored dry-run plan; execute only after explicit operator approval. Unknown delivery must never be retried.",
+            "description":if name == "repair_app_group_association" { "Explicit operator-confirmed single-attempt association repair using existing authentication. Requires an original unknown association UUID, an exactly unchanged original baseline and identical complete desired set. Preserves the original receipt and ordinary write block. A new stored dry-run plan and fresh confirmation are required; never automatically execute or repeat a repair. Repair-aware rollback binaries are required after preparation." } else { "Experimental undocumented Developer Portal operation. Reuses eligible credentials from the configured reviewer when no dedicated Developer session exists; live Developer access and explicit Team verification remain required. Writes default to a stored dry-run plan; execute only after explicit operator approval. Unknown delivery must never be retried." },
             "inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},
             "annotations":{"readOnlyHint":read,"destructiveHint":destructive,"idempotentHint":read,"openWorldHint":true}})).collect()
     }
@@ -463,6 +470,7 @@ impl DeveloperPortal {
         let write = match name {
             "create_app_group" => Some(groups::write_args(args, groups::Kind::Create)?),
             "associate_app_group" => Some(groups::write_args(args, groups::Kind::Associate)?),
+            "repair_app_group_association" => Some(groups::repair_args(args)?),
             "list_app_groups" => {
                 groups::team_args(args, false)?;
                 None
@@ -545,14 +553,35 @@ impl DeveloperPortal {
                 Some(receipts.confirmed(&write, &transaction.generation)?)
             };
             if let Some(index) = confirmed {
+                if write.plan.recovery_of.is_some() {
+                    // Cancellation during preflight must not leave an expiring approval.
+                    receipts.records[index].state = state::Delivery::Rejected;
+                    receipts.records[index].observation = "not_dispatched".into();
+                    receipts.save(self)?;
+                }
+                let mut observed_repair = None;
                 let preparation = async {
                     let (plan, no_op) = self.resolve_plan(&mut transaction, &write.plan).await?;
+                    receipts.validate_recovery_plan(&plan, no_op.is_some())?;
                     transaction.persist_overlay()?;
+                    if plan.recovery_of.is_some()
+                        && let Some(mut output) = no_op
+                    {
+                        plan.recovery_output(&mut output);
+                        output["causation_verified"] = json!(false);
+                        observed_repair = Some(output);
+                        bail!("developer_recovery_already_observed");
+                    }
                     if plan != receipts.records[index].plan || no_op.is_some() {
                         bail!("developer_plan_changed");
                     }
-                    self.prepare_mutation(&mut transaction, &plan, started)
-                        .await?;
+                    if self.prepare_mutation(&mut transaction, &plan, started).await? {
+                        transaction.persist_overlay()?;
+                        let mut output = json!({"state":"no_op","group_ids":plan.expected,"causation_verified":false});
+                        plan.recovery_output(&mut output);
+                        observed_repair = Some(output);
+                        bail!("developer_recovery_already_observed");
+                    }
                     Ok::<_, anyhow::Error>(plan)
                 }
                 .await;
@@ -594,14 +623,22 @@ impl DeveloperPortal {
                     receipts.records[index].observation = "delivery_unknown".into();
                     receipts.save(self)?;
                 }
+                if let Some(output) = observed_repair {
+                    return Ok(output);
+                }
                 if let Some(error) = local_error {
                     return Err(error);
                 }
                 return Ok(receipts.records[index].summary());
             }
             let (plan, no_op) = self.resolve_plan(&mut transaction, &write.plan).await?;
+            receipts.validate_recovery_plan(&plan, no_op.is_some())?;
             transaction.persist_overlay()?;
-            if let Some(no_op) = no_op {
+            if let Some(mut no_op) = no_op {
+                plan.recovery_output(&mut no_op);
+                if plan.recovery_of.is_some() {
+                    no_op["causation_verified"] = json!(false);
+                }
                 return Ok(no_op);
             }
             return receipts.prepare(self, plan);
