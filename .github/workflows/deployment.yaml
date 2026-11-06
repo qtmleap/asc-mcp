@@ -60,17 +60,27 @@ jobs:
           IMAGE_PLATFORM: ${{ matrix.platform }}
         run: docker run --rm --platform "$IMAGE_PLATFORM" "${REGISTRY}/${IMAGE_NAME}@${IMAGE_DIGEST}" version
       - name: Export digest
+        id: digest
+        shell: bash
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${IMAGE_DIGEST#sha256:}"
+          set -euo pipefail
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          digest_dir=$(mktemp -d "${RUNNER_TEMP:?}/asc-digest.XXXXXX")
+          printf 'path=%s\n' "$digest_dir" >> "$GITHUB_OUTPUT"
+          touch "$digest_dir/${IMAGE_DIGEST#sha256:}"
       - uses: actions/upload-artifact@v4
         with:
           name: digests-${{ matrix.artifact }}
-          path: /tmp/digests/*
+          path: ${{ steps.digest.outputs.path }}/*
           if-no-files-found: error
           retention-days: 1
+      - name: Remove exported digest directory
+        if: always() && steps.digest.outputs.path != ''
+        env:
+          DIGEST_DIR: ${{ steps.digest.outputs.path }}
+        run: rm -rf -- "$DIGEST_DIR"
   publish:
     needs: build
     runs-on: [self-hosted, Linux, X64, docker]
@@ -89,11 +99,18 @@ jobs:
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Allocate digest download directory
+        id: digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest_dir=$(mktemp -d "${RUNNER_TEMP:?}/asc-publish-digests.XXXXXX")
+          printf 'path=%s\n' "$digest_dir" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           pattern: digests-*
           merge-multiple: true
-          path: /tmp/digests
+          path: ${{ steps.digests.outputs.path }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -110,16 +127,42 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
       - name: Publish multi-platform manifest
-        working-directory: /tmp/digests
-        run: |
-          mapfile -t tags < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
-          args=()
-          for tag in "${tags[@]}"; do args+=(-t "$tag"); done
-          for digest in *; do args+=("${REGISTRY}/${IMAGE_NAME}@sha256:${digest}"); done
-          docker buildx imagetools create "${args[@]}"
-      - name: Verify manifest contains amd64 and arm64
+        shell: bash
+        working-directory: ${{ steps.digests.outputs.path }}
         env:
           VERSION: ${{ steps.package.outputs.version }}
         run: |
-          docker buildx imagetools inspect "${REGISTRY}/${IMAGE_NAME}:${VERSION}" --raw > /tmp/manifest.json
-          jq -e '([.manifests[].platform | select(.os == "linux") | .architecture] | unique | sort) == ["amd64", "arm64"]' /tmp/manifest.json
+          set -euo pipefail
+          shopt -s nullglob dotglob
+          digests=(*)
+          [[ ${#digests[@]} == 2 ]]
+          sources=()
+          for digest in "${digests[@]}"; do
+            [[ "$digest" =~ ^[0-9a-f]{64}$ && -f "$digest" && ! -L "$digest" && ! -s "$digest" ]]
+            sources+=("${REGISTRY}/${IMAGE_NAME}@sha256:${digest}")
+          done
+          candidate=$(mktemp "${RUNNER_TEMP:?}/asc-manifest-candidate.XXXXXX")
+          published=$(mktemp "${RUNNER_TEMP:?}/asc-manifest-published.XXXXXX")
+          trap 'rm -f -- "$candidate" "$published"' EXIT
+          docker buildx imagetools create --dry-run "${sources[@]}" > "$candidate"
+          jq -e '
+            ([.manifests[] | select(.platform.os == "linux") | .platform.architecture] | sort) == ["amd64", "arm64"]
+            and all(.manifests[];
+              (.platform.os == "linux" and (.platform.architecture == "amd64" or .platform.architecture == "arm64"))
+              or (.platform.os == "unknown" and .platform.architecture == "unknown"
+                and .annotations["vnd.docker.reference.type"] == "attestation-manifest"))
+          ' "$candidate"
+          jq -e '.tags | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' <<< "$DOCKER_METADATA_OUTPUT_JSON"
+          mapfile -t tags < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          args=()
+          for tag in "${tags[@]}"; do args+=(-t "$tag"); done
+          docker buildx imagetools create "${args[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "${REGISTRY}/${IMAGE_NAME}:${VERSION}" --raw > "$published"
+          jq -e --slurpfile candidate "$candidate" '
+            (.manifests | sort_by(.digest)) == ($candidate[0].manifests | sort_by(.digest))
+          ' "$published"
+      - name: Remove downloaded digest directory
+        if: always() && steps.digests.outputs.path != ''
+        env:
+          DIGEST_DIR: ${{ steps.digests.outputs.path }}
+        run: rm -rf -- "$DIGEST_DIR"
