@@ -18,6 +18,12 @@ Experimental App Group registration and iOS App ID association are opt-in and
 can reuse the configured reviewer's existing Apple ID session; see
 [Developer Portal setup and safety limits](docs/developer-portal.md).
 
+Version 0.2.1 adds a separately confirmed, single-attempt repair for an unknown
+App Group association. The original uncertainty and ordinary write block remain
+after repair. After preparing a repair, use a repair-aware binary for rollback;
+published 0.2.0 cannot read the extended ledger. Never delete or restore an old
+ledger to clear that block. See the Developer Portal guide before using repair.
+
 ## Quick start (Docker)
 
 Prerequisites: Docker with Linux containers, Compose 2.30+ with BuildKit, Git,

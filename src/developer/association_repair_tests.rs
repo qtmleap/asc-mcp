@@ -669,9 +669,10 @@ async fn explicit_repair_final_receipt_failure_stays_unknown_and_blocks_recovery
         .call("repair_app_group_association", &args)
         .await
         .unwrap();
+    // Consume the approval and persist Attempting; fail the final outcome save.
     client
         .fail_receipt
-        .store(2, std::sync::atomic::Ordering::SeqCst);
+        .store(3, std::sync::atomic::Ordering::SeqCst);
     assert!(
         client
             .call(
@@ -696,5 +697,252 @@ async fn explicit_repair_final_receipt_failure_stays_unknown_and_blocks_recovery
             .await
             .is_err()
     );
+    assert_eq!(fixture.state.lock().unwrap().mutation_count, 2);
+}
+
+const ASSIGN: &str = "assignApplicationGroupToAppId.action";
+
+fn age_record(root: &std::path::Path, index: usize, seconds: i64) {
+    edit_receipts(root, |store| {
+        let created = chrono::Utc::now().timestamp() - seconds;
+        store["records"][index]["created_at"] = json!(created);
+        store["records"][index]["expires_at"] = json!(created + 900);
+    });
+}
+
+fn receipt_records(root: &std::path::Path) -> Vec<Value> {
+    let store: Value =
+        serde_json::from_slice(&fs::read(root.join("receipts.json")).unwrap()).unwrap();
+    store["records"].as_array().unwrap().clone()
+}
+
+#[tokio::test]
+async fn explicit_repair_cancelled_after_confirmation_stays_consumed_after_expiry() {
+    let fixture = StatefulFixture::start().await;
+    fixture.state.lock().unwrap().created = true;
+    let root = tempfile::tempdir().unwrap();
+    let client = fixture.client(root.path());
+    client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap();
+    let original = original_unknown(&client, &fixture).await;
+    let args = repair_args(&original);
+    let prepared = client
+        .call("repair_app_group_association", &args)
+        .await
+        .unwrap();
+    let gate = fixture.gate_next_detail();
+    let task = {
+        let client = client.clone();
+        let request = execution(&prepared, args.clone());
+        tokio::spawn(async move { client.call("repair_app_group_association", &request).await })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(10), gate.arrived.notified())
+        .await
+        .expect("the confirmed repair never reached its first post-confirmation detail read");
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    gate.release();
+    drop(client);
+
+    age_record(root.path(), 1, 1000);
+    let restarted = fixture.client(root.path());
+    let error = restarted
+        .call("repair_app_group_association", &args)
+        .await
+        .expect_err("a cancelled confirmed repair must keep its recovery slot consumed");
+    assert_eq!(error.to_string(), "developer_recovery_consumed");
+    assert_eq!(fixture.count_posts(ASSIGN), 1);
+    assert_eq!(fixture.state.lock().unwrap().mutation_count, 1);
+    let status = restarted
+        .call(
+            "get_app_group_write_status",
+            &json!({"operation_id":prepared["operation_id"]}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status["state"], "rejected");
+    assert_eq!(status["observation"], "not_dispatched");
+}
+
+#[tokio::test]
+async fn explicit_repair_expired_never_confirmed_child_allows_fresh_token_only() {
+    let fixture = StatefulFixture::start().await;
+    fixture.state.lock().unwrap().created = true;
+    let root = tempfile::tempdir().unwrap();
+    let client = fixture.client(root.path());
+    client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap();
+    let original = original_unknown(&client, &fixture).await;
+    let args = repair_args(&original);
+    let stale = client
+        .call("repair_app_group_association", &args)
+        .await
+        .unwrap();
+    age_record(root.path(), 1, 1000);
+    let restarted = fixture.client(root.path());
+    let fresh = restarted
+        .call("repair_app_group_association", &args)
+        .await
+        .unwrap();
+    assert_ne!(fresh["operation_id"], stale["operation_id"]);
+    assert_ne!(fresh["confirmation_token"], stale["confirmation_token"]);
+    assert!(
+        restarted
+            .call(
+                "repair_app_group_association",
+                &execution(&stale, args.clone())
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(fixture.count_posts(ASSIGN), 1);
+    let repaired = restarted
+        .call("repair_app_group_association", &execution(&fresh, args))
+        .await
+        .unwrap();
+    assert_eq!(repaired["state"], "verified");
+    assert_eq!(fixture.count_posts(ASSIGN), 2);
+}
+
+#[tokio::test]
+async fn explicit_repair_aged_rejected_unknown_and_attempting_children_keep_blocking() {
+    for (state, observation, blocked_by) in [
+        ("rejected", "not_dispatched", "developer_recovery_consumed"),
+        (
+            "delivery_unknown",
+            "delivery_unknown",
+            "developer_target_delivery_unknown",
+        ),
+        (
+            "attempting",
+            "attempting",
+            "developer_target_delivery_unknown",
+        ),
+    ] {
+        let fixture = StatefulFixture::start().await;
+        fixture.state.lock().unwrap().created = true;
+        let root = tempfile::tempdir().unwrap();
+        let client = fixture.client(root.path());
+        client
+            .publish_login("ABCDEFGHIJ", vec![seed()])
+            .await
+            .unwrap();
+        let original = original_unknown(&client, &fixture).await;
+        let args = repair_args(&original);
+        let prepared = client
+            .call("repair_app_group_association", &args)
+            .await
+            .unwrap();
+        edit_receipts(root.path(), |store| {
+            let created = chrono::Utc::now().timestamp() - 40 * 86400;
+            store["records"][1]["state"] = json!(state);
+            store["records"][1]["observation"] = json!(observation);
+            store["records"][1]["created_at"] = json!(created);
+            store["records"][1]["expires_at"] = json!(created + 900);
+        });
+        let restarted = fixture.client(root.path());
+        let error = restarted
+            .call("repair_app_group_association", &args)
+            .await
+            .expect_err(state);
+        assert_eq!(error.to_string(), blocked_by, "{state}");
+        let records = receipt_records(root.path());
+        assert_eq!(records.len(), 2, "{state}");
+        assert_eq!(records[1]["operation_id"], prepared["operation_id"]);
+        let (persisted, why) = if state == "attempting" {
+            ("delivery_unknown", "interrupted")
+        } else {
+            (state, observation)
+        };
+        assert_eq!(records[1]["state"], persisted);
+        assert_eq!(records[1]["observation"], why);
+        assert_eq!(fixture.count_posts(ASSIGN), 1, "{state}");
+    }
+}
+
+#[tokio::test]
+async fn full_legacy_receipt_file_without_recovery_fields_loads_without_rewrite() {
+    let legacy_plan = r#"{"kind":"associate","team":"ABCDEFGHIJ","identifier":"group.example.new","name":null,"bundle_id":"com.example.app","app_id":"APPID123","group_id":"GROUPNEW1","generation":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","baseline":["GROUPOLD1"],"expected":["GROUPNEW1","GROUPOLD1"]}"#;
+    let plan_digest = "cb6ece7a72a257dfcf9c33ea738a0729f981987871f6a72da4f8a0b9a56fb37a";
+    let operation = uuid::Uuid::new_v4().to_string();
+    let created = chrono::Utc::now().timestamp() - 100;
+    let file = format!(
+        r#"{{"schema":1,"records":[{{"schema":1,"operation_id":"{operation}","plan":{legacy_plan},"token_hash":"{}","plan_digest":"{plan_digest}","state":"verified","created_at":{created},"expires_at":{},"observation":"verified"}}]}}"#,
+        "b".repeat(64),
+        created + 900
+    );
+    assert!(!file.contains("recovery"));
+    let fixture = StatefulFixture::start().await;
+    let root = tempfile::tempdir().unwrap();
+    let client = fixture.client(root.path());
+    client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap();
+    let path = root.path().join("receipts.json");
+    fs_safe::atomic_write(&path, file.as_bytes()).unwrap();
+    let status = client
+        .call(
+            "get_app_group_write_status",
+            &json!({"operation_id":operation}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status["state"], "verified");
+    assert_eq!(fs::read(&path).unwrap(), file.as_bytes());
+    let records = receipt_records(root.path());
+    assert_eq!(records[0]["plan_digest"], plan_digest);
+    assert_eq!(fixture.state.lock().unwrap().mutation_count, 0);
+}
+
+#[tokio::test]
+async fn explicit_repair_early_consumption_save_failure_sends_nothing_and_stays_confirmable() {
+    let fixture = StatefulFixture::start().await;
+    fixture.state.lock().unwrap().created = true;
+    let root = tempfile::tempdir().unwrap();
+    let client = fixture.client(root.path());
+    client
+        .publish_login("ABCDEFGHIJ", vec![seed()])
+        .await
+        .unwrap();
+    let original = original_unknown(&client, &fixture).await;
+    let args = repair_args(&original);
+    let prepared = client
+        .call("repair_app_group_association", &args)
+        .await
+        .unwrap();
+    let before = fixture.state.lock().unwrap().captured.len();
+    // The first receipt save after confirmation is the durable consumption.
+    client
+        .fail_receipt
+        .store(1, std::sync::atomic::Ordering::SeqCst);
+    let request = execution(&prepared, args.clone());
+    let error = client
+        .call("repair_app_group_association", &request)
+        .await
+        .expect_err("a failed consumption save must fail the confirmed repair");
+    assert_eq!(error.to_string(), "developer_state_unwritable");
+    {
+        let state = fixture.state.lock().unwrap();
+        let sent: Vec<_> = state.captured[before..]
+            .iter()
+            .map(|(path, ..)| path.as_str())
+            .filter(|path| !path.ends_with("listTeams.action"))
+            .collect();
+        assert!(sent.is_empty(), "unexpected requests: {sent:?}");
+        assert_eq!(state.mutation_count, 1);
+    }
+    let records = receipt_records(root.path());
+    assert_eq!(records[1]["state"], "prepared");
+    assert_eq!(records[1]["observation"], "prepared");
+    let repaired = client
+        .call("repair_app_group_association", &request)
+        .await
+        .unwrap();
+    assert_eq!(repaired["state"], "verified");
     assert_eq!(fixture.state.lock().unwrap().mutation_count, 2);
 }

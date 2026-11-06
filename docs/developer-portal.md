@@ -174,9 +174,14 @@ attempt. Expired never-dispatched plans may be removed, but terminal repair
 receipts are retained permanently. A verified repair still reports
 `original_delivery_unknown: true` and `normal_writes_blocked: true`; the original
 receipt is not resolved or removed. A lost/unknown repair cannot be tried again.
-The single confirmed-operation limit is deliberately conservative: even a
-pre-dispatch read/validation failure consumes that confirmation and repair slot.
-It is not permission to retry, edit the ledger or continue the old approval.
+The single confirmed-operation limit is deliberately conservative. A validated
+confirmation is durably consumed before asynchronous pre-dispatch checks, so
+failure, cancellation or restart during those checks still consumes the repair
+slot. No mutation is sent if recording consumption fails. A storage error may
+occur after the new record was written; inspect the receipt rather than assume
+the old confirmation is reusable. It is not permission to retry, edit the ledger
+or continue the old approval. A lost, never-confirmed token requires waiting for
+its 15-minute preparation to expire before requesting a fresh plan.
 
 Identical planned sets cannot prove identical server-side effects of a malformed
 original request. Readback proves observed state, not permanent convergence;

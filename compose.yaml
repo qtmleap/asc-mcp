@@ -1,6 +1,6 @@
 services:
   asc-mcp:
-    image: asc-mcp-local:0.2.0
+    image: asc-mcp-local:0.2.1
     build:
       context: ${ASC_MCP_SOURCE_DIR:-.}
       dockerfile: Dockerfile

@@ -972,6 +972,30 @@ struct FixtureState {
     replace_on_mutation: Option<(std::path::PathBuf, Vec<u8>)>,
     block_overlay_on_mutation: Option<std::path::PathBuf>,
     mutation_cookie: Option<String>,
+    detail_gate: Option<(
+        usize,
+        std::sync::Arc<tokio::sync::Notify>,
+        std::sync::Arc<tokio::sync::Semaphore>,
+    )>,
+}
+
+/// Holds one `getAppIdDetail` response until released; releases on drop so a
+/// failing test never leaves a handler parked.
+struct DetailGate {
+    arrived: std::sync::Arc<tokio::sync::Notify>,
+    release: std::sync::Arc<tokio::sync::Semaphore>,
+}
+
+impl DetailGate {
+    fn release(&self) {
+        self.release.add_permits(16);
+    }
+}
+
+impl Drop for DetailGate {
+    fn drop(&mut self) {
+        self.release();
+    }
 }
 
 impl Drop for StatefulFixture {
@@ -992,6 +1016,16 @@ impl StatefulFixture {
                 let authorization = request.headers().contains_key("authorization");
                 let csrf = request.headers().get("csrf").is_some_and(|value| value == "fixture-csrf") && request.headers().get("csrf_ts").is_some_and(|value| value == "123");
                 let bytes = axum::body::to_bytes(request.into_body(), 65536).await.unwrap();
+                let gate = {
+                    let mut state = shared.lock().unwrap();
+                    if path.ends_with("getAppIdDetail.action")
+                        && state.detail_gate.as_ref().is_some_and(|(number, ..)| *number == state.detail_count + 1)
+                    { state.detail_gate.take() } else { None }
+                };
+                if let Some((_, arrived, release)) = gate {
+                    arrived.notify_one();
+                    release.acquire().await.unwrap().forget();
+                }
                 let form = String::from_utf8(bytes.to_vec()).unwrap();
                 let association_values: Vec<_> = url::form_urlencoded::parse(form.as_bytes())
                     .filter(|(key, _)| key == "applicationGroups")
@@ -1062,6 +1096,25 @@ impl StatefulFixture {
     }
     fn client(&self, root: &std::path::Path) -> DeveloperPortal {
         DeveloperPortal::for_test(&self.endpoint, root, &root.join("session.cookie")).unwrap()
+    }
+    /// Parks the next `getAppIdDetail` request; `arrived` fires once it is in flight.
+    fn gate_next_detail(&self) -> DetailGate {
+        let gate = DetailGate {
+            arrived: std::sync::Arc::new(tokio::sync::Notify::new()),
+            release: std::sync::Arc::new(tokio::sync::Semaphore::new(0)),
+        };
+        let mut state = self.state.lock().unwrap();
+        let number = state.detail_count + 1;
+        state.detail_gate = Some((number, gate.arrived.clone(), gate.release.clone()));
+        gate
+    }
+    fn count_posts(&self, suffix: &str) -> usize {
+        let state = self.state.lock().unwrap();
+        state
+            .captured
+            .iter()
+            .filter(|(path, ..)| path.ends_with(suffix))
+            .count()
     }
 }
 

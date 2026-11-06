@@ -553,6 +553,12 @@ impl DeveloperPortal {
                 Some(receipts.confirmed(&write, &transaction.generation)?)
             };
             if let Some(index) = confirmed {
+                if write.plan.recovery_of.is_some() {
+                    // Cancellation during preflight must not leave an expiring approval.
+                    receipts.records[index].state = state::Delivery::Rejected;
+                    receipts.records[index].observation = "not_dispatched".into();
+                    receipts.save(self)?;
+                }
                 let mut observed_repair = None;
                 let preparation = async {
                     let (plan, no_op) = self.resolve_plan(&mut transaction, &write.plan).await?;
